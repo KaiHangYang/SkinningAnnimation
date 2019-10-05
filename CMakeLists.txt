@@ -33,10 +33,10 @@ source_group("Include" FILES ${SA_HDRS})
 source_group("Source" FILES ${SA_SRCS})
 source_group("ThirdParty" FILES ${THIRDPARTY_SRCS})
 
-add_library(salib ${SA_HDRS} ${SA_SRCS} ${THIRDPARTY_SRCS})
-target_link_libraries(salib ${LINK_LIBS})
+add_library(sa_utils ${SA_HDRS} ${SA_SRCS} ${THIRDPARTY_SRCS})
+target_link_libraries(sa_utils ${LINK_LIBS})
 
-list(APPEND LINK_LIBS salib)
+list(APPEND LINK_LIBS sa_utils)
 
 # imgui demo
 add_executable(imgui_demo 
