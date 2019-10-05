@@ -42,3 +42,8 @@ list(APPEND LINK_LIBS salib)
 add_executable(imgui_demo 
     ${PROJECT_SOURCE_DIR}/main/imgui_demo.cpp)
 target_link_libraries(imgui_demo ${LINK_LIBS})
+
+# skinning animation
+add_executable(sa
+    ${PROJECT_SOURCE_DIR}/main/skinning_animation.cpp)
+target_link_libraries(sa ${LINK_LIBS})
