@@ -92,10 +92,6 @@
 #ifndef CERCES_INTERNAL_MINIGLOG_GLOG_LOGGING_H_
 #define CERCES_INTERNAL_MINIGLOG_GLOG_LOGGING_H_
 
-#ifdef ANDROID
-#  include <android/log.h>
-#endif  // ANDROID
-
 #include <algorithm>
 #include <ctime>
 #include <fstream>
@@ -106,8 +102,11 @@
 #include <vector>
 
 // For appropriate definition of CERES_EXPORT macro.
-#include "ceres/internal/port.h"
-#include "ceres/internal/disable_warnings.h"
+// Modified from ceres miniglog version [begin] -------------------------------
+//#include "ceres/internal/port.h"
+//#include "ceres/internal/disable_warnings.h"
+#define CERES_EXPORT
+// Modified from ceres miniglog version [end] ---------------------------------
 
 // Log severity level constants.
 const int FATAL = -3;
@@ -209,7 +208,7 @@ public:
 #else
 		// If not building on Android, log all output to std::cerr.
 		std::cerr << stream_.str();
-#endif  // ANDROID
+#endif
 
 		LogToSinks(severity_);
 		WaitForSinks();
@@ -367,6 +366,15 @@ void LogMessageFatal(const char *file, int line, const T &message) {
 #define CHECK_GE(val1, val2) CHECK_OP(val1, val2, >=)
 #define CHECK_GT(val1, val2) CHECK_OP(val1, val2, >)
 
+// qiao.helloworld@gmail.com /tzu.ta.lin@gmail.com add
+// Add logging macros which are missing in glog or are not accessible for
+// whatever reason.
+#define CHECK_NEAR(val1, val2, margin)           \
+  do {                                           \
+    CHECK_LE((val1), (val2)+(margin));           \
+    CHECK_GE((val1), (val2)-(margin));           \
+  } while (0)
+
 #ifndef NDEBUG
 // Debug only versions of CHECK_OP macros.
 #  define DCHECK_EQ(val1, val2) CHECK_OP(val1, val2, ==)
@@ -375,6 +383,8 @@ void LogMessageFatal(const char *file, int line, const T &message) {
 #  define DCHECK_LT(val1, val2) CHECK_OP(val1, val2, <)
 #  define DCHECK_GE(val1, val2) CHECK_OP(val1, val2, >=)
 #  define DCHECK_GT(val1, val2) CHECK_OP(val1, val2, >)
+// qiao.helloworld@gmail.com /tzu.ta.lin@gmail.com add
+#  define DCHECK_NEAR(val1, val2, margin) CHECK_NEAR(val1, val2, margin)
 #else
 // These versions generate no code in optimized mode.
 #  define DCHECK_EQ(val1, val2) if (false) CHECK_OP(val1, val2, ==)
@@ -383,6 +393,8 @@ void LogMessageFatal(const char *file, int line, const T &message) {
 #  define DCHECK_LT(val1, val2) if (false) CHECK_OP(val1, val2, <)
 #  define DCHECK_GE(val1, val2) if (false) CHECK_OP(val1, val2, >=)
 #  define DCHECK_GT(val1, val2) if (false) CHECK_OP(val1, val2, >)
+// qiao.helloworld@gmail.com /tzu.ta.lin@gmail.com add
+#  define DCHECK_NEAR(val1, val2, margin) if (false) CHECK_NEAR(val1, val2, margin)
 #endif  // NDEBUG
 
 // ---------------------------CHECK_NOTNULL macros ---------------------------
@@ -421,6 +433,42 @@ T& CheckNotNull(const char *file, int line, const char *names, T& t) {
   CheckNotNull(__FILE__, __LINE__, "'" #val "' Must be non NULL", (val))
 #endif  // NDEBUG
 
-#include "ceres/internal/reenable_warnings.h"
+// Modified from ceres miniglog version [begin] -------------------------------
+//#include "ceres/internal/reenable_warnings.h"
+// Modified from ceres miniglog version [end] ---------------------------------
+
+
+// ---------------------------TRACE macros ---------------------------
+// qiao.helloworld@gmail.com /tzu.ta.lin@gmail.com add
+#define __FILENAME__ \
+  (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
+
+#define DEXEC(fn)                                                      \
+  do {                                                                 \
+    DLOG(INFO) << "[EXEC " << #fn << " START]";                        \
+    std::chrono::steady_clock::time_point begin =                      \
+      std::chrono::steady_clock::now();                                \
+    fn;                                                                \
+    std::chrono::steady_clock::time_point end =                        \
+      std::chrono::steady_clock::now();                                \
+    DLOG(INFO) << "[EXEC " << #fn << " FINISHED in "                   \
+             << std::chrono::duration_cast<std::chrono::microseconds>  \
+               (end - begin).count() << " ms]";                        \
+  } while (0);
+// DEXEC(fn)
+//
+// Usage:
+// DEXEC(foo());
+// -- output --
+// foo.cpp: 123 [EXEC foo() START]
+// foo.cpp: 123 [EXEC foo() FINISHED in 456 ms]
+
+#define DTRACE  DLOG(INFO) << "of [" << __func__ << "]";
+// Usage:
+// void foo() {
+//   DTRACE
+// }
+// -- output --
+// foo.cpp: 123 of [void foo(void)]
 
 #endif  // CERCES_INTERNAL_MINIGLOG_GLOG_LOGGING_H_

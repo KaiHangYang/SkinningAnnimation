@@ -28,7 +28,7 @@
 //
 // Author: keir@google.com (Keir Mierle)
 
-#include "glog/logging.h"
+#include "common/logging.h"
 
 namespace google {
 

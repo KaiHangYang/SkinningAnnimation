@@ -15,6 +15,7 @@ static void glfw_error_callback(int error, const char* desc) {
 
 int main(int argc, char** argv) {
 	glfwSetErrorCallback(glfw_error_callback);
+
 	CHECK(glfwInit()) << "GLFW Error: Failed to initialize GLFW!";
 
 	// Use OpenGL 3.3
