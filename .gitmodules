@@ -7,3 +7,9 @@
 [submodule "thirdparty/gl3w"]
 	path = thirdparty/gl3w
 	url = git@github.com:skaslev/gl3w.git
+[submodule "thirdparty/glm"]
+	path = thirdparty/glm
+	url = git@github.com:g-truc/glm.git
+[submodule "thirdparty/filesystem"]
+	path = thirdparty/filesystem
+	url = git@github.com:wjakob/filesystem.git

@@ -1,19 +1,21 @@
-#include "imgui.h"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_opengl3.h"
+#include <imgui.h>
 #include <cstdio>
 #include <iostream>
 
+#include "common/logging.h"
+#include "gui/imgui_impl_glfw.h"
+#include "gui/imgui_impl_opengl3.h"
 #include <GL/gl3w.h>
 #include <GLFW/glfw3.h>
 
+
 static void glfw_error_callback(int error, const char* desc) {
-	fprintf(stderr, "GLFW Error %d: %s\n", error, desc);
+	LOG(WARNING) << "GLFW Error: " << error << ", " << desc;
 }
 
 int main(int argc, char** argv) {
 	glfwSetErrorCallback(glfw_error_callback);
-	if (!glfwInit()) return 1;
+	CHECK(glfwInit()) << "GLFW Error: Failed to initialize GLFW!";
 
 	// Use OpenGL 3.3
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -30,11 +32,8 @@ int main(int argc, char** argv) {
 	// the screen refresh frequency
 	glfwSwapInterval(1);
 
-	bool err = gl3wInit() != 0;
-	if (err) {
-		fprintf(stderr, "Failed to initialize OpenGL loader!\n");
-		return 1;
-	}
+	bool success = gl3wInit() == 0;
+	CHECK(success) << "GL3W: Failed to initialize OpenGL loader!";
 
 	// Setup gui context
 	IMGUI_CHECKVERSION();

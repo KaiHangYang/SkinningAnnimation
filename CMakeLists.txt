@@ -4,16 +4,22 @@ project(SkinningAnimation)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --std=c++11")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
 
+# Debug Logging Level
+add_definitions(-D MAX_LOG_LEVEL=3)
+
+
 set(LINK_LIBS)
 # OpenCV Dependence
 find_package(OpenCV REQUIRED)
 
 include_directories(
     ${OpenCV_INCLUDE_DIRS}
+    ${PROJECT_SOURCE_DIR}/src
+	${PROJECT_SOURCE_DIR}/thirdparty/glm
     ${PROJECT_SOURCE_DIR}/thirdparty/glfw/include
     ${PROJECT_SOURCE_DIR}/thirdparty/gl3w/include
     ${PROJECT_SOURCE_DIR}/thirdparty/imgui
-    ${PROJECT_SOURCE_DIR}/thirdparty/imgui/examples)
+    ${PROJECT_SOURCE_DIR}/thirdparty/filesystem)
 
 list(APPEND LINK_LIBS 
     ${OpenCV_LIBS}
