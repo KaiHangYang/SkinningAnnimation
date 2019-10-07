@@ -110,7 +110,7 @@
 
 // Log severity level constants.
 const int FATAL = -3;
-const int ERROR = -2;
+//const int ERROR = -2;
 const int WARNING = -1;
 const int INFO = 0;
 
@@ -121,7 +121,7 @@ namespace google {
 	typedef int LogSeverity;
 	const int INFO = ::INFO;
 	const int WARNING = ::WARNING;
-	const int ERROR = ::ERROR;
+	//const int ERROR = ::ERROR;
 	const int FATAL = ::FATAL;
 
 	// Sink class used for integration with mock and test functions. If sinks are
@@ -183,7 +183,7 @@ public:
 #ifdef ANDROID
 		static const int android_log_levels[] = {
 			ANDROID_LOG_FATAL,    // LOG(FATAL)
-			ANDROID_LOG_ERROR,    // LOG(ERROR)
+			//ANDROID_LOG_ERROR,    // LOG(ERROR)
 			ANDROID_LOG_WARN,     // LOG(WARNING)
 			ANDROID_LOG_INFO,     // LOG(INFO), LG, VLOG(0)
 			ANDROID_LOG_DEBUG,    // VLOG(1)

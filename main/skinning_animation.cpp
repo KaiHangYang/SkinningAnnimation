@@ -2,16 +2,17 @@
 #include <cstdio>
 #include <iostream>
 
-#include "common/logging.h"
-#include "common/shader.h"
-#include "gui/imgui_impl_glfw.h"
-#include "gui/imgui_impl_opengl3.h"
 #include <GL/gl3w.h>
 #include <GLFW/glfw3.h>
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/videoio.hpp>
+
+#include "common/logging.h"
+#include "gui/imgui_impl_glfw.h"
+#include "gui/imgui_impl_opengl3.h"
+#include "gui/scene.h"
 
 static void glfw_error_callback(int error, const char* desc) {
 	LOG(WARNING) << "GLFW Error: " << error << ", " << desc;
@@ -47,6 +48,9 @@ int main(int argc, char** argv) {
 
 	bool success = gl3wInit() == 0;
 	CHECK(success) << "GL3W: Failed to initialize OpenGL loader!";
+	// OpenGL Inited!
+
+	Scene scene;
 
 	// Setup gui context
 	IMGUI_CHECKVERSION();
@@ -75,49 +79,6 @@ int main(int argc, char** argv) {
 	//io.Fonts->AddFontFromFileTTF("../../misc/fonts/ProggyTiny.ttf", 10.0f);
 	//ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, NULL, io.Fonts->GetGlyphRangesJapanese());
 	//IM_ASSERT(font != NULL);
-
-	GLuint img_texture_id;
-	glGenTextures(1, &img_texture_id);
-	glBindTexture(GL_TEXTURE_2D, img_texture_id);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	LOG(INFO) << img.cols << " " << img.rows << " " << img_texture_id;
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, img.cols, img.rows, 0, GL_RGB, GL_UNSIGNED_BYTE, img.data);
-	glGenerateMipmap(GL_TEXTURE_2D);
-
-	// Only vbo binding, vertexAttribPointer VertexAttribArray are related to vao.
-	GLuint bg_vao;
-	glGenVertexArrays(1, &bg_vao);
-	glBindVertexArray(bg_vao);
-	
-	std::vector<GLfloat> bg_vertices{-1.f, 1.f, 0.f, 0.f, // x, y, ux, uy
-							  -1.f, -1.f, 0.f, 1.f,
-							  1.f, -1.f, 1.f, 1.f,
-							  1.f, 1.f, 1.f, 0.f };
-	GLintptr vertex_position_offset = 0 * sizeof(GLfloat);
-	GLintptr vertex_uv_offset = 2 * sizeof(GLfloat);
-
-	std::vector<GLushort> bg_indices{ 0, 1, 2,
-									2, 3, 0 };
-	GLuint bg_vbo, bg_ebo;
-	glGenBuffers(1, &bg_vbo);
-	glBindBuffer(GL_ARRAY_BUFFER, bg_vbo);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * bg_vertices.size(), bg_vertices.data(), GL_STATIC_DRAW);
-	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 4, (GLvoid*)vertex_position_offset);
-	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 4, (GLvoid*)vertex_uv_offset);
-	
-	glGenBuffers(1, &bg_ebo);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, bg_ebo);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLushort) * bg_indices.size(), bg_indices.data(), GL_STATIC_DRAW);
-	glEnableVertexAttribArray(0);
-	glEnableVertexAttribArray(1);
-	glBindVertexArray(0);
-
-	// May try to use pbo to accelerate the reading process.
-
-	Shader bg_shader("../res/shader/bg.vs", "../res/shader/bg.fs");
 
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 	bool show_canvas = false;
@@ -159,17 +120,6 @@ int main(int argc, char** argv) {
 		glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
 		glClear(GL_COLOR_BUFFER_BIT);
 
-		// Draw my thing for test
-		bg_shader.Use();
-		glBindVertexArray(bg_vao);
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, img_texture_id);
-		bg_shader.Set("tex", 0);
-		glDrawElements(GL_TRIANGLES, bg_indices.size(), GL_UNSIGNED_SHORT, 0);
-		glBindVertexArray(0);
-
-		// Try to read framebuffer data
-		std::vector<float> frame_img(display_w * display_h * 3);
 
 		// Frame buffer coord in opengl is 
 		// |
@@ -180,12 +130,14 @@ int main(int argc, char** argv) {
 		// |
 		// so I need to flip vertically
 
-		glReadBuffer(GL_BACK);
-		glReadPixels(0, 0, display_w, display_h, GL_BGR, GL_FLOAT, &frame_img[0]);
-		cv::Mat tmp_img(wnd_height, wnd_width, CV_32FC3, &frame_img[0]);
-		cv::flip(tmp_img, tmp_img, 0);
-		cv::imshow("test", tmp_img);
-		cv::waitKey(1);
+		//glReadBuffer(GL_BACK);
+		//glReadPixels(0, 0, display_w, display_h, GL_BGR, GL_FLOAT, &frame_img[0]);
+		//cv::Mat tmp_img(wnd_height, wnd_width, CV_32FC3, &frame_img[0]);
+		//cv::flip(tmp_img, tmp_img, 0);
+		//cv::imshow("test", tmp_img);
+		//cv::waitKey(1);
+
+		scene.Draw(img);
 
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 		glfwSwapBuffers(window);
