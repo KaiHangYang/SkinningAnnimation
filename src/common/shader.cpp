@@ -80,25 +80,31 @@ void Shader::Use() {
 }
 
 void Shader::Set(const std::string& val_name, const glm::mat3& val) {
-	GLint localtion = glGetUniformLocation(program_id_, val_name.c_str());
-	glUniformMatrix3fv(localtion, 1, GL_FALSE, &val[0][0]);
+	GLint location = glGetUniformLocation(program_id_, val_name.c_str());
+	glUniformMatrix3fv(location, 1, GL_FALSE, &val[0][0]);
 }
 
 void Shader::Set(const std::string& val_name, const glm::vec3& val) {
-	GLint localtion = glGetUniformLocation(program_id_, val_name.c_str());
-	glUniform3f(localtion, val.x, val.y, val.z);
+	GLint location = glGetUniformLocation(program_id_, val_name.c_str());
+	glUniform3f(location, val.x, val.y, val.z);
 }
 
 void Shader::Set(const std::string& val_name, const glm::mat4& val) {
-	GLint localtion = glGetUniformLocation(program_id_, val_name.c_str());
-	glUniformMatrix4fv(localtion, 1, GL_FALSE, &val[0][0]);
+	GLint location = glGetUniformLocation(program_id_, val_name.c_str());
+	glUniformMatrix4fv(location, 1, GL_FALSE, &val[0][0]);
 }
 
 void Shader::Set(const std::string& val_name, const glm::vec4& val) {
-	GLint localtion = glGetUniformLocation(program_id_, val_name.c_str());
-	glUniform4f(localtion, val.x, val.y, val.z, val.w);
+	GLint location = glGetUniformLocation(program_id_, val_name.c_str());
+	glUniform4f(location, val.x, val.y, val.z, val.w);
 }
+
 void Shader::Set(const std::string& val_name, float val) {
-	GLint localtion = glGetUniformLocation(program_id_, val_name.c_str());
-	glUniform1f(localtion, val);
+	GLint location = glGetUniformLocation(program_id_, val_name.c_str());
+	glUniform1f(location, val);
+}
+
+void Shader::Set(const std::string& val_name, int val) {
+	GLint location = glGetUniformLocation(program_id_, val_name.c_str());
+	glUniform1i(location, val);
 }

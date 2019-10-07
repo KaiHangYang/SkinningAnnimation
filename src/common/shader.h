@@ -16,6 +16,7 @@ public:
 	void Set(const std::string& val_name, const glm::mat4& val);
 	void Set(const std::string& val_name, const glm::vec4& val);
 	void Set(const std::string& val_name, float val);
+	void Set(const std::string& val_name, int val);
 private:
 	GLuint program_id_;
 };
