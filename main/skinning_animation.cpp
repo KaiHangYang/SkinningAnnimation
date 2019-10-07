@@ -120,7 +120,6 @@ int main(int argc, char** argv) {
 		glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
 		glClear(GL_COLOR_BUFFER_BIT);
 
-
 		// Frame buffer coord in opengl is 
 		// |
 		// |_______
@@ -142,7 +141,6 @@ int main(int argc, char** argv) {
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 		glfwSwapBuffers(window);
 	}
-
 
 	// Cleanup
 	ImGui_ImplOpenGL3_Shutdown();

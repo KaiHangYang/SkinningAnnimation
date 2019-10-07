@@ -68,7 +68,8 @@ void Scene::Draw(const cv::Mat& bg_img) {
 	glBindVertexArray(vao_);
 	shader_.Use();
 	glBindTexture(GL_TEXTURE_2D, bg_tex_id_);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, bg_img.rows, bg_img.cols, 0, GL_RGB, GL_UNSIGNED_BYTE, bg_img.data);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, bg_img.cols, bg_img.rows, 0, GL_RGB, GL_UNSIGNED_BYTE, bg_img.data);
 	glActiveTexture(GL_TEXTURE0);
 	shader_.Set("tex", 0);
 	glDrawElements(GL_TRIANGLES, bg_n_, GL_UNSIGNED_SHORT, 0);
