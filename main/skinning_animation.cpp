@@ -19,7 +19,7 @@ static void glfw_error_callback(int error, const char* desc) {
 }
 
 int main(int argc, char** argv) {
-	cv::VideoCapture video_cap = cv::VideoCapture("C:/Users/kaihang/Desktop/test_video.mp4");
+	cv::VideoCapture video_cap = cv::VideoCapture("E:/Video_To_Test/0019.mp4");
 	cv::Mat img;
 	video_cap.read(img);
 	int wnd_height = video_cap.get(CV_CAP_PROP_FRAME_HEIGHT);
@@ -136,6 +136,8 @@ int main(int argc, char** argv) {
 		//cv::imshow("test", tmp_img);
 		//cv::waitKey(1);
 
+		cv::Mat cur_img;
+		if (video_cap.read(cur_img)) img = cur_img;
 		scene.Draw(img);
 
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

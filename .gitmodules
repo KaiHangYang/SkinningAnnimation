@@ -13,3 +13,6 @@
 [submodule "thirdparty/filesystem"]
 	path = thirdparty/filesystem
 	url = git@github.com:wjakob/filesystem.git
+[submodule "thirdparty/jsoncpp"]
+	path = thirdparty/jsoncpp
+	url = git@github.com:open-source-parsers/jsoncpp.git
