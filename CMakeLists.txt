@@ -30,9 +30,9 @@ file(GLOB_RECURSE SA_HDRS "src/*.h" "src/*.hpp")
 
 set(THIRDPARTY_SRCS
     ${PROJECT_SOURCE_DIR}/thirdparty/imgui/imgui.cpp
-    ${PROJECT_SOURCE_DIR}/thirdparty/imgui/imgui_demo.cpp
     ${PROJECT_SOURCE_DIR}/thirdparty/imgui/imgui_draw.cpp
     ${PROJECT_SOURCE_DIR}/thirdparty/imgui/imgui_widgets.cpp
+    ${PROJECT_SOURCE_DIR}/thirdparty/imgui/imgui_demo.cpp
     ${PROJECT_SOURCE_DIR}/thirdparty/gl3w/src/gl3w.c)
 
 source_group("Include" FILES ${SA_HDRS})
@@ -45,9 +45,9 @@ target_link_libraries(sa_utils ${LINK_LIBS})
 list(APPEND LINK_LIBS sa_utils)
 
 # imgui demo
-add_executable(imgui_demo 
-    ${PROJECT_SOURCE_DIR}/main/imgui_demo.cpp)
-target_link_libraries(imgui_demo ${LINK_LIBS})
+add_executable(demo 
+    ${PROJECT_SOURCE_DIR}/main/demo.cpp)
+target_link_libraries(demo ${LINK_LIBS})
 
 # skinning animation
 add_executable(sa

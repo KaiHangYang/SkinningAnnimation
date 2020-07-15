@@ -22,8 +22,8 @@ int main(int argc, char** argv) {
 	cv::VideoCapture video_cap = cv::VideoCapture("E:/Video_To_Test/0019.mp4");
 	cv::Mat img;
 	video_cap.read(img);
-	int wnd_height = video_cap.get(CV_CAP_PROP_FRAME_HEIGHT);
-	int wnd_width = video_cap.get(CV_CAP_PROP_FRAME_WIDTH);
+	int wnd_height = video_cap.get(CV_CAP_PROP_FRAME_HEIGHT) / 3.0;
+	int wnd_width = video_cap.get(CV_CAP_PROP_FRAME_WIDTH) / 3.0;
 
 	glfwSetErrorCallback(glfw_error_callback);
 
@@ -34,7 +34,7 @@ int main(int argc, char** argv) {
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); // 3.2+ only
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);		   // 3.0+ only
-	glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);					   // fix window size
+	glfwWindowHint(GLFW_RESIZABLE, GL_TRUE);					   // fix window size
 	const char* glsl_version = "#version 330";
 
 	GLFWwindow* window = glfwCreateWindow(wnd_width, wnd_height, "Skinning Animation", nullptr, nullptr);
@@ -104,13 +104,13 @@ int main(int argc, char** argv) {
 			ImGui::End();
 		}
 
-		//// Canvas
-		//if (show_canvas) {
-		//	ImGui::Begin("Canvas", &show_canvas);
-		//	int test = 3;
-		//	ImGui::Image(&test, ImVec2(img.cols, img.rows));
-		//	ImGui::End();
-		//}
+		// Canvas
+		if (show_canvas) {
+			ImGui::Begin("Canvas", &show_canvas);
+			int test = 3;
+			ImGui::Image(&test, ImVec2(img.cols, img.rows));
+			ImGui::End();
+		}
 		ImGui::Render();
 
 		int display_w, display_h;
@@ -138,7 +138,7 @@ int main(int argc, char** argv) {
 
 		cv::Mat cur_img;
 		if (video_cap.read(cur_img)) img = cur_img;
-		scene.Draw(img);
+		// scene.Draw(img);
 
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 		glfwSwapBuffers(window);
