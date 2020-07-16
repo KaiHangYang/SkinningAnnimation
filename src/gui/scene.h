@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common/shader.h"
+#include "graphic/shader.h"
 #include <GL/gl3w.h>
 #include <opencv2/core.hpp>
 

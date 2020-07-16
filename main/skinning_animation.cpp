@@ -10,6 +10,8 @@
 #include <opencv2/videoio.hpp>
 
 #include "common/logging.h"
+#include "graphic/texture.h"
+#include "graphic/utility.h"
 #include "gui/imgui_impl_glfw.h"
 #include "gui/imgui_impl_opengl3.h"
 #include "gui/scene.h"
@@ -22,8 +24,11 @@ int main(int argc, char **argv) {
   cv::VideoCapture video_cap = cv::VideoCapture("E:/Video_To_Test/0019.mp4");
   cv::Mat img;
   video_cap.read(img);
-  int wnd_height = video_cap.get(CV_CAP_PROP_FRAME_HEIGHT) / 3.0;
-  int wnd_width = video_cap.get(CV_CAP_PROP_FRAME_WIDTH) / 3.0;
+
+  Texture img_tex;
+
+  int wnd_height = video_cap.get(cv::CAP_PROP_FRAME_HEIGHT) / 3.0;
+  int wnd_width = video_cap.get(cv::CAP_PROP_FRAME_WIDTH) / 3.0;
 
   glfwSetErrorCallback(glfw_error_callback);
 
@@ -68,43 +73,10 @@ int main(int argc, char **argv) {
   ImGui_ImplGlfw_InitForOpenGL(window, true);
   ImGui_ImplOpenGL3_Init(glsl_version);
 
-  // Load Fonts
-  // - If no fonts are loaded, dear imgui will use the default font. You can
-  // also load multiple fonts and use ImGui::PushFont()/PopFont() to select
-  // them.
-  // - AddFontFromFileTTF() will return the ImFont* so you can store it if you
-  // need to select the font among multiple.
-  // - If the file cannot be loaded, the function will return NULL. Please
-  // handle those errors in your application (e.g. use an assertion, or display
-  // an error and quit).
-  // - The fonts will be rasterized at a given size (w/ oversampling) and stored
-  // into a texture when calling ImFontAtlas::Build()/GetTexDataAsXXXX(), which
-  // ImGui_ImplXXXX_NewFrame below will call.
-  // - Read 'misc/fonts/README.txt' for more instructions and details.
-  // - Remember that in C/C++ if you want to include a backslash \ in a string
-  // literal you need to write a double backslash \\ !
-  // io.Fonts->AddFontDefault();
-  // io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf", 16.0f);
-  // io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
-  // io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf", 16.0f);
-  // io.Fonts->AddFontFromFileTTF("../../misc/fonts/ProggyTiny.ttf", 10.0f);
-  // ImFont* font =
-  // io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f,
-  // NULL, io.Fonts->GetGlyphRangesJapanese()); IM_ASSERT(font != NULL);
-
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
   bool show_canvas = false;
   // Main Loop
   while (!glfwWindowShouldClose(window)) {
-    // Poll and handle events (inputs, window resize, etc.)
-    // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to
-    // tell if dear imgui wants to use your inputs.
-    // - When io.WantCaptureMouse is true, do not dispatch mouse input data to
-    // your main application.
-    // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input
-    // data to your main application. Generally you may always pass all inputs
-    // to dear imgui, and hide them from your application based on those two
-    // flags.
     glfwPollEvents();
 
     // Start the Dear ImGui frame
@@ -124,7 +96,9 @@ int main(int argc, char **argv) {
     if (show_canvas) {
       if (ImGui::Begin("About Dear ImGui", &show_canvas,
                        ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Image();
+        img_tex.LoadImage(img);
+        ImGui::Image(reinterpret_cast<ImTextureID>(img_tex.GetId()),
+                     ImVec2(img_tex.width(), img_tex.height()));
       }
       ImGui::End();
     }

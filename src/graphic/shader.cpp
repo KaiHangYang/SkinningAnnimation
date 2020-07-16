@@ -1,5 +1,5 @@
 #include "common/logging.h"
-#include "common/shader.h"
+#include "graphic/shader.h"
 #include <filesystem/path.h>
 #include <cstdio>
 #include <fstream>
