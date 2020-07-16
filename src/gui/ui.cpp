@@ -224,8 +224,9 @@ void App::RenderScene() {
 
   ImGui::Text("X: %f Y: %f", io.MousePos.x, io.MousePos.y);
   glm::mat4 grid_model_matrix(1.f);
-  ImGuizmo::DrawGrid(&view_matrix_[0][0], &proj_matrix_[0][0],
-                     &grid_model_matrix[0][0], 100.f);
+
+
+
   ImGuizmo::DrawCubes(&view_matrix_[0][0], &proj_matrix_[0][0],
                       &model_matrix_[0][0], 1);
 
@@ -233,7 +234,6 @@ void App::RenderScene() {
   ImGuizmo::SetID(0);
   EditTransform(&view_matrix_[0][0], &proj_matrix_[0][0], &model_matrix_[0][0],
                 true);
-
   ImGui::End();
 
   ImGuizmo::ViewManipulate(&view_matrix_[0][0], camera_distance_,
