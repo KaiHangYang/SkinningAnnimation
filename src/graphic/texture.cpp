@@ -42,7 +42,7 @@ bool Texture::LoadImage(const cv::Mat &img) {
     external_formate = GL_BGRA;
 
   glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.cols, img.rows, 0, GL_RGBA,
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.cols, img.rows, 0, external_formate,
                GL_UNSIGNED_BYTE, img.data);
 
   return true;

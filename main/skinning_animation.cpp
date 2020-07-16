@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <imgui.h>
+#include <ImGuizmo.h>
 #include <iostream>
 
 #include <GL/gl3w.h>
@@ -15,20 +16,16 @@
 #include "gui/imgui_impl_glfw.h"
 #include "gui/imgui_impl_opengl3.h"
 #include "gui/scene.h"
+#include "gui/ui.h"
 
 static void glfw_error_callback(int error, const char *desc) {
   LOG(WARNING) << "GLFW Error: " << error << ", " << desc;
 }
 
 int main(int argc, char **argv) {
-  cv::VideoCapture video_cap = cv::VideoCapture("E:/Video_To_Test/0019.mp4");
+  cv::VideoCapture video_cap = cv::VideoCapture("E:/Video_To_Test/0055.mp4");
   cv::Mat img;
   video_cap.read(img);
-
-  Texture img_tex;
-
-  int wnd_height = video_cap.get(cv::CAP_PROP_FRAME_HEIGHT) / 3.0;
-  int wnd_width = video_cap.get(cv::CAP_PROP_FRAME_WIDTH) / 3.0;
 
   glfwSetErrorCallback(glfw_error_callback);
 
@@ -42,7 +39,7 @@ int main(int argc, char **argv) {
   glfwWindowHint(GLFW_RESIZABLE, GL_TRUE); // fix window size
   const char *glsl_version = "#version 330";
 
-  GLFWwindow *window = glfwCreateWindow(wnd_width, wnd_height,
+  GLFWwindow *window = glfwCreateWindow(1280, 720,
                                         "Skinning Animation", nullptr, nullptr);
 
   if (!window)
@@ -56,8 +53,6 @@ int main(int argc, char **argv) {
   bool success = gl3wInit() == 0;
   CHECK(success) << "GL3W: Failed to initialize OpenGL loader!";
   // OpenGL Inited!
-
-  Scene scene;
 
   // Setup gui context
   IMGUI_CHECKVERSION();
@@ -73,8 +68,14 @@ int main(int argc, char **argv) {
   ImGui_ImplGlfw_InitForOpenGL(window, true);
   ImGui_ImplOpenGL3_Init(glsl_version);
 
+  Scene scene;
+  Texture img_tex;
+
+  // <<<<<<<<<<<<<<<<<<<<<< Controller variables <<<<<<<<<<<<<<<<<<<<<<<<<
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-  bool show_canvas = false;
+  bool show_video = true;
+  float video_scale = 1.0;
+  // <<<<<<<<<<<<<<<<<<<<<< Controller variables <<<<<<<<<<<<<<<<<<<<<<<<<
   // Main Loop
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
@@ -86,21 +87,19 @@ int main(int argc, char **argv) {
 
     // Controller
     {
-      ImGui::Begin("Controller");
-      ImGui::Checkbox("Canvas", &show_canvas);
-      ImGui::ColorEdit3("clear color", (float *)(&clear_color));
+      ImGui::Begin("Controller", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+      ImGui::Checkbox("Video:", &show_video);
+      if (show_video) {
+        ImGui::SliderFloat("video scale.", &video_scale, 0.5f, 3.0f, "%.2f");
+      }
+      ImGui::Separator();
       ImGui::End();
     }
 
-    // Canvas
-    if (show_canvas) {
-      if (ImGui::Begin("About Dear ImGui", &show_canvas,
-                       ImGuiWindowFlags_AlwaysAutoResize)) {
-        img_tex.LoadImage(img);
-        ImGui::Image(reinterpret_cast<ImTextureID>(img_tex.GetId()),
-                     ImVec2(img_tex.width(), img_tex.height()));
-      }
-      ImGui::End();
+    // Video visualizer.
+    if (show_video) {
+      img_tex.LoadImage(img);
+      RenderVideoPlayer(img_tex, show_video, video_scale);
     }
 
     ImGui::Render();
