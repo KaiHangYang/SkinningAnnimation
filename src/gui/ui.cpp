@@ -1,17 +1,160 @@
-#include "gui/ui.h"
-#include "common/logging.h"
+#include <glm/gtc/matrix_transform.hpp>
 
-void RenderVideoPlayer(const Texture &tex, bool &open_video, float scale,
-                       int wnd_width, int wnd_height) {
+#include "common/logging.h"
+#include "gui/ui.h"
+
+static void glfw_error_callback(int error, const char *desc) {
+  LOG(WARNING) << "GLFW Error: " << error << ", " << desc;
+}
+
+bool App::Init(int wnd_width, int wnd_height, const std::string &title) {
+  glfwSetErrorCallback(glfw_error_callback);
+  CHECK(glfwInit()) << "GLFW Error: Failed to initialize GLFW!";
+
+  // Use OpenGL 3.3
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); // 3.2+ only
+  glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);           // 3.0+ only
+  glfwWindowHint(GLFW_RESIZABLE, GL_TRUE); // fix window size
+  const char *glsl_version = "#version 330";
+
+  window_ = glfwCreateWindow(wnd_width, wnd_height, "Skinning Animation",
+                             nullptr, nullptr);
+
+  if (!window_)
+    return inited_;
+
+  glfwMakeContextCurrent(window_);
+  // set v-sync, make the gpu frequency the same as
+  // the screen refresh frequency
+  glfwSwapInterval(1);
+
+  bool success = gl3wInit() == 0;
+  if (!success) {
+    LOG(WARNING) << "GL3W: Failed to initialize OpenGL loader!";
+    return inited_;
+  }
+  // OpenGL Inited!
+
+  // Setup gui context
+  IMGUI_CHECKVERSION();
+  ImGui::CreateContext();
+  ImGuiIO &io = ImGui::GetIO();
+  // io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable
+  // Keyboard Controls io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad; //
+  // Enable Gamepad Controls
+
+  ImGui::StyleColorsClassic();
+
+  // Setup Platform/Renderer bindings
+  ImGui_ImplGlfw_InitForOpenGL(window_, true);
+  ImGui_ImplOpenGL3_Init(glsl_version);
+
+  wnd_width_ = wnd_width;
+  wnd_height_ = wnd_height;
+
+  show_video_ = true;
+  video_scale_ = 1.0;
+
+  // Init scene params.
+  proj_matrix_ = glm::perspective(
+      fov_ / 180.f * MY_PI, io.DisplaySize.x / io.DisplaySize.y, 0.001f, 100.f);
+  {
+    // Set view_matrix_
+    glm::vec3 eye{
+        cosf(camera_angle_.y) * cosf(camera_angle_.x) * camera_distance_,
+        sinf(camera_angle_.x) * camera_distance_,
+        sinf(camera_angle_.y) * cosf(camera_angle_.x) * camera_distance_};
+    glm::vec3 at{0.f, 0.f, 0.f};
+    glm::vec3 up{0.f, 1.f, 0.f};
+    view_matrix_ = glm::lookAt(eye, at, up);
+  }
+
+  inited_ = true;
+  return inited_;
+}
+
+int App::MainLoop() {
+  if (!inited_) {
+    LOG(WARNING) << "App hasn't been inited!";
+    return -1;
+  }
+
+  // Video For Debug.
+  cv::Mat img;
+  cv::VideoCapture cap("E:/Video_To_Test/0055.mp4");
+  Texture img_tex;
+
+  while (!glfwWindowShouldClose(window_)) {
+    glfwPollEvents();
+
+    // Start the Dear ImGui frame
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    // Video visualizer.
+    if (show_video_) {
+      img_tex.LoadImage(img);
+      RenderVideoPlayer(img_tex, show_video_, video_scale_);
+    }
+
+    RenderScene();
+
+    int display_w, display_h;
+    glfwGetFramebufferSize(window_, &display_w, &display_h);
+    glViewport(0, 0, display_w, display_h);
+
+    glClearColor(clear_color_.x, clear_color_.y, clear_color_.z,
+                 clear_color_.w);
+    glClear(GL_COLOR_BUFFER_BIT);
+    ImGui::Render();
+
+    // Frame buffer coord in opengl is
+    // |
+    // |_______
+    // but in image coordinate is
+    // ________
+    // |
+    // |
+    // so I need to flip vertically
+
+    // glReadBuffer(GL_BACK);
+    // glReadPixels(0, 0, display_w, display_h, GL_BGR, GL_FLOAT,
+    // &frame_img[0]); cv::Mat tmp_img(wnd_height, wnd_width, CV_32FC3,
+    // &frame_img[0]); cv::flip(tmp_img, tmp_img, 0); cv::imshow("test",
+    // tmp_img); cv::waitKey(1);
+
+    cv::Mat cur_img;
+    if (cap.read(cur_img))
+      img = cur_img;
+
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    glfwSwapBuffers(window_);
+  }
+
+  // Cleanup
+  ImGui_ImplOpenGL3_Shutdown();
+  ImGui_ImplGlfw_Shutdown();
+  ImGui::DestroyContext();
+  glfwDestroyWindow(window_);
+  glfwTerminate();
+
+  return 0;
+}
+
+void App::RenderVideoPlayer(const Texture &tex, bool &open_video, float scale,
+                            int widget_width, int widget_height) {
 
   int img_width = tex.width();
   int img_height = tex.height();
   if (img_width > img_height) {
-    img_height *= static_cast<float>(wnd_width) / img_width;
-    img_width = wnd_width;
+    img_height *= static_cast<float>(widget_width) / img_width;
+    img_width = widget_width;
   } else {
-    img_width *= static_cast<float>(wnd_height) / img_height;
-    img_height = wnd_height;
+    img_width *= static_cast<float>(widget_height) / img_height;
+    img_height = widget_height;
   }
   img_width *= scale;
   img_height *= scale;
@@ -31,96 +174,75 @@ void RenderVideoPlayer(const Texture &tex, bool &open_video, float scale,
   ImGui::End();
 }
 
-void Frustum(float left, float right, float bottom, float top, float znear,
-             float zfar, float *m16) {
-  float temp, temp2, temp3, temp4;
-  temp = 2.0f * znear;
-  temp2 = right - left;
-  temp3 = top - bottom;
-  temp4 = zfar - znear;
-  m16[0] = temp / temp2;
-  m16[1] = 0.0;
-  m16[2] = 0.0;
-  m16[3] = 0.0;
-  m16[4] = 0.0;
-  m16[5] = temp / temp3;
-  m16[6] = 0.0;
-  m16[7] = 0.0;
-  m16[8] = (right + left) / temp2;
-  m16[9] = (top + bottom) / temp3;
-  m16[10] = (-zfar - znear) / temp4;
-  m16[11] = -1.0f;
-  m16[12] = 0.0;
-  m16[13] = 0.0;
-  m16[14] = (-temp * zfar) / temp4;
-  m16[15] = 0.0;
+void App::RenderScene() {
+  ImGuiIO &io = ImGui::GetIO();
+  if (is_perspective_) {
+    proj_matrix_ =
+        glm::perspective(fov_ / 180.f * MY_PI,
+                         io.DisplaySize.x / io.DisplaySize.y, 0.001f, 100.f);
+  } else {
+    float view_height = view_width_ * io.DisplaySize.y / io.DisplaySize.x;
+    proj_matrix_ = glm::ortho(-view_width_, view_width_, -view_height,
+                              view_height, -1000.0f, 1000.0f);
+  }
+
+  ImGuizmo::SetOrthographic(!is_perspective_);
+  ImGuizmo::BeginFrame();
+
+  // create a window and insert the inspector
+  ImGui::SetNextWindowPos(ImVec2(10, 10));
+  ImGui::SetNextWindowSize(ImVec2(320, 340));
+  ImGui::Begin("Editor");
+  ImGui::Checkbox("show video.", &show_video_);
+  ImGui::SliderFloat("video scale.", &video_scale_, 0.5f, 3.0f, "%.2f");
+  ImGui::Separator();
+
+  ImGui::Text("Camera");
+  if (ImGui::RadioButton("Perspective", is_perspective_))
+    is_perspective_ = true;
+  ImGui::SameLine();
+  if (ImGui::RadioButton("Orthographic", !is_perspective_))
+    is_perspective_ = false;
+
+  if (is_perspective_) {
+    ImGui::SliderFloat("Fov", &fov_, 20.f, 110.f);
+  } else {
+    ImGui::SliderFloat("Ortho width", &view_width_, 1, 20);
+  }
+  bool view_dirty =
+      ImGui::SliderFloat("Distance", &camera_distance_, 3.f, 30.f);
+  if (view_dirty) {
+    // Set view_matrix_
+    glm::vec3 eye{
+        cosf(camera_angle_.y) * cosf(camera_angle_.x) * camera_distance_,
+        sinf(camera_angle_.x) * camera_distance_,
+        sinf(camera_angle_.y) * cosf(camera_angle_.x) * camera_distance_};
+    glm::vec3 at{0.f, 0.f, 0.f};
+    glm::vec3 up{0.f, 1.f, 0.f};
+    view_matrix_ = glm::lookAt(eye, at, up);
+  }
+
+  ImGui::Text("X: %f Y: %f", io.MousePos.x, io.MousePos.y);
+  glm::mat4 grid_model_matrix(1.f);
+  ImGuizmo::DrawGrid(&view_matrix_[0][0], &proj_matrix_[0][0],
+                     &grid_model_matrix[0][0], 100.f);
+  ImGuizmo::DrawCubes(&view_matrix_[0][0], &proj_matrix_[0][0],
+                      &model_matrix_[0][0], 1);
+
+  ImGui::Separator();
+  ImGuizmo::SetID(0);
+  EditTransform(&view_matrix_[0][0], &proj_matrix_[0][0], &model_matrix_[0][0],
+                true);
+
+  ImGui::End();
+
+  ImGuizmo::ViewManipulate(&view_matrix_[0][0], camera_distance_,
+                           ImVec2(io.DisplaySize.x - 128, 0), ImVec2(128, 128),
+                           0x10101010);
 }
 
-void Perspective(float fovyInDegrees, float aspectRatio, float znear,
-                 float zfar, float *m16) {
-  float ymax, xmax;
-  ymax = znear * tanf(fovyInDegrees * 3.141592f / 180.0f);
-  xmax = ymax * aspectRatio;
-  Frustum(-xmax, xmax, -ymax, ymax, znear, zfar, m16);
-}
-void Cross(const float *a, const float *b, float *r) {
-  r[0] = a[1] * b[2] - a[2] * b[1];
-  r[1] = a[2] * b[0] - a[0] * b[2];
-  r[2] = a[0] * b[1] - a[1] * b[0];
-}
-
-float Dot(const float *a, const float *b) {
-  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-void Normalize(const float *a, float *r) {
-  float il = 1.f / (sqrtf(Dot(a, a)) + FLT_EPSILON);
-  r[0] = a[0] * il;
-  r[1] = a[1] * il;
-  r[2] = a[2] * il;
-}
-
-void LookAt(const float *eye, const float *at, const float *up, float *m16) {
-  float X[3], Y[3], Z[3], tmp[3];
-
-  tmp[0] = eye[0] - at[0];
-  tmp[1] = eye[1] - at[1];
-  tmp[2] = eye[2] - at[2];
-  // Z.normalize(eye - at);
-  Normalize(tmp, Z);
-  Normalize(up, Y);
-  // Y.normalize(up);
-
-  Cross(Y, Z, tmp);
-  // tmp.cross(Y, Z);
-  Normalize(tmp, X);
-  // X.normalize(tmp);
-
-  Cross(Z, X, tmp);
-  // tmp.cross(Z, X);
-  Normalize(tmp, Y);
-  // Y.normalize(tmp);
-
-  m16[0] = X[0];
-  m16[1] = Y[0];
-  m16[2] = Z[0];
-  m16[3] = 0.0f;
-  m16[4] = X[1];
-  m16[5] = Y[1];
-  m16[6] = Z[1];
-  m16[7] = 0.0f;
-  m16[8] = X[2];
-  m16[9] = Y[2];
-  m16[10] = Z[2];
-  m16[11] = 0.0f;
-  m16[12] = -Dot(X, eye);
-  m16[13] = -Dot(Y, eye);
-  m16[14] = -Dot(Z, eye);
-  m16[15] = 1.0f;
-}
-
-void EditTransform(const float *cameraView, float *cameraProjection,
-                   float *matrix, bool editTransformDecomposition) {
+void App::EditTransform(const float *cameraView, float *cameraProjection,
+                        float *matrix, bool editTransformDecomposition) {
   static ImGuizmo::OPERATION mCurrentGizmoOperation(ImGuizmo::TRANSLATE);
   static ImGuizmo::MODE mCurrentGizmoMode(ImGuizmo::LOCAL);
   static bool useSnap = false;
@@ -194,102 +316,4 @@ void EditTransform(const float *cameraView, float *cameraProjection,
                        mCurrentGizmoMode, matrix, NULL,
                        useSnap ? &snap[0] : NULL, boundSizing ? bounds : NULL,
                        boundSizingSnap ? boundsSnap : NULL);
-}
-
-void RenderScene() {
-  static float objectMatrix[4][16] = {{1.f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f,
-                                       0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 0.f, 1.f},
-
-                                      {1.f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f,
-                                       0.f, 0.f, 1.f, 0.f, 2.f, 0.f, 0.f, 1.f},
-
-                                      {1.f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f,
-                                       0.f, 0.f, 1.f, 0.f, 2.f, 0.f, 2.f, 1.f},
-
-                                      {1.f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f,
-                                       0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 2.f, 1.f}};
-
-  static const float identityMatrix[16] = {1.f, 0.f, 0.f, 0.f, 0.f, 1.f,
-                                           0.f, 0.f, 0.f, 0.f, 1.f, 0.f,
-                                           0.f, 0.f, 0.f, 1.f};
-
-  static float cameraView[16] = {1.f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f,
-                                 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 0.f, 1.f};
-
-  static float cameraProjection[16];
-  static float fov = 27.f;
-  static float viewWidth = 10.f; // for orthographic
-  static float camYAngle = 165.f / 180.f * 3.14159f;
-  static float camXAngle = 32.f / 180.f * 3.14159f;
-  static float camDistance = 8.f;
-  static int gizmoCount = 1;
-  static int lastUsing = 0;
-  static bool firstFrame = true;
-  static bool isPerspective = true;
-  ImGuiIO &io = ImGui::GetIO();
-
-  Perspective(fov, io.DisplaySize.x / io.DisplaySize.y, 0.1f, 100.f,
-              cameraProjection);
-  ImGuizmo::SetOrthographic(false);
-  ImGuizmo::BeginFrame();
-  // ImGuizmo::DrawGrid(cameraView, cameraProjection, identityMatrix, 100.f);
-  // ImGuizmo::DrawCubes(cameraView, cameraProjection, &objectMatrix[0][0], 1);
-
-  ImGui::SetNextWindowPos(ImVec2(1024, 100));
-  ImGui::SetNextWindowSize(ImVec2(256, 256));
-
-  // create a window and insert the inspector
-  ImGui::SetNextWindowPos(ImVec2(10, 10));
-  ImGui::SetNextWindowSize(ImVec2(320, 340));
-  ImGui::Begin("Editor");
-  ImGui::Text("Camera");
-  bool viewDirty = false;
-  if (ImGui::RadioButton("Perspective", isPerspective))
-    isPerspective = true;
-  ImGui::SameLine();
-  if (ImGui::RadioButton("Orthographic", !isPerspective))
-    isPerspective = false;
-  if (isPerspective) {
-    ImGui::SliderFloat("Fov", &fov, 20.f, 110.f);
-  } else {
-    ImGui::SliderFloat("Ortho width", &viewWidth, 1, 20);
-  }
-  viewDirty |= ImGui::SliderFloat("Distance", &camDistance, 1.f, 10.f);
-  ImGui::SliderInt("Gizmo count", &gizmoCount, 1, 4);
-
-  if (viewDirty || firstFrame) {
-    float eye[] = {cosf(camYAngle) * cosf(camXAngle) * camDistance,
-                   sinf(camXAngle) * camDistance,
-                   sinf(camYAngle) * cosf(camXAngle) * camDistance};
-    float at[] = {0.f, 0.f, 0.f};
-    float up[] = {0.f, 1.f, 0.f};
-    LookAt(eye, at, up, cameraView);
-    firstFrame = false;
-  }
-
-  ImGui::Text("X: %f Y: %f", io.MousePos.x, io.MousePos.y);
-  ImGuizmo::DrawGrid(cameraView, cameraProjection, identityMatrix, 100.f);
-  ImGuizmo::DrawCubes(cameraView, cameraProjection, &objectMatrix[0][0],
-                      gizmoCount);
-  ImGui::Separator();
-  for (int matId = 0; matId < gizmoCount; matId++) {
-    ImGuizmo::SetID(matId);
-
-    EditTransform(cameraView, cameraProjection, objectMatrix[matId],
-                  lastUsing == matId);
-    if (ImGuizmo::IsUsing()) {
-      lastUsing = matId;
-    }
-  }
-
-  ImGui::End();
-
-  ImGuizmo::ViewManipulate(cameraView, camDistance,
-                           ImVec2(io.DisplaySize.x - 128, 0), ImVec2(128, 128),
-                           0x10101010);
-  // LOG(INFO) << "Print the camera view: ";
-  // for (int i = 0; i < 16; i += 4) {
-  //   std::cout << cameraView[i + 0] << " " << cameraView[i + 1] << " " <<
-  //   cameraView[i + 2] << " " << cameraView[i + 3] << std::endl;
-  // }
 }
