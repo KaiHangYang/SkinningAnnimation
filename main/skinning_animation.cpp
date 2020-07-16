@@ -88,10 +88,8 @@ int main(int argc, char **argv) {
     // Controller
     {
       ImGui::Begin("Controller", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-      ImGui::Checkbox("Video:", &show_video);
-      if (show_video) {
-        ImGui::SliderFloat("video scale.", &video_scale, 0.5f, 3.0f, "%.2f");
-      }
+      ImGui::Checkbox("show video.", &show_video);
+      ImGui::SliderFloat("video scale.", &video_scale, 0.5f, 3.0f, "%.2f");
       ImGui::Separator();
       ImGui::End();
     }
@@ -102,7 +100,7 @@ int main(int argc, char **argv) {
       RenderVideoPlayer(img_tex, show_video, video_scale);
     }
 
-    ImGui::Render();
+    RenderScene();
 
     int display_w, display_h;
     glfwGetFramebufferSize(window, &display_w, &display_h);
@@ -110,6 +108,7 @@ int main(int argc, char **argv) {
 
     glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
     glClear(GL_COLOR_BUFFER_BIT);
+    ImGui::Render();
 
     // Frame buffer coord in opengl is
     // |
