@@ -19,7 +19,8 @@ include_directories(
     ${PROJECT_SOURCE_DIR}/thirdparty/gl3w/include
     ${PROJECT_SOURCE_DIR}/thirdparty/imgui
     ${PROJECT_SOURCE_DIR}/thirdparty/filesystem
-    ${PROJECT_SOURCE_DIR}/thirdparty/ImGuizmo)
+    ${PROJECT_SOURCE_DIR}/thirdparty/ImGuizmo
+    ${PROJECT_SOURCE_DIR}/thirdparty/tinygltf)
 
 list(APPEND LINK_LIBS 
     ${OpenCV_LIBS}

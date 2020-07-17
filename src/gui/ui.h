@@ -14,10 +14,13 @@
 #include <opencv2/videoio.hpp>
 
 #include "common/utility.h"
+#include "graphic/geometry.h"
+#include "graphic/shader.h"
 #include "graphic/texture.h"
 #include "gui/imgui_impl_glfw.h"
 #include "gui/imgui_impl_opengl3.h"
 #include "gui/ui.h"
+
 
 class App {
 public:
@@ -34,6 +37,17 @@ private:
   void RenderScene();
   void EditTransform(const float *cameraView, float *cameraProjection,
                      float *matrix, bool editTransformDecomposition);
+
+  // for plane debug
+
+  Shader plane_shader_;
+  Geometry::Grid plane_grid_;
+  GLuint plane_vao_ = 0;
+  GLuint plane_vbo_ = 0;
+  int plane_vertex_num_ = 0;
+  void InitPlane();
+  void RenderPlane(const glm::mat4 &view_matrix, const glm::mat4 &proj_matrix,
+                   const glm::mat4 &model_matrix);
 
   struct CameraAngle {
     float x = 165.f / 180.f * MY_PI;

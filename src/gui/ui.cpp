@@ -14,6 +14,7 @@ bool App::Init(int wnd_width, int wnd_height, const std::string &title) {
   // Use OpenGL 3.3
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+  glfwWindowHint(GLFW_SAMPLES, 4);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); // 3.2+ only
   glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);           // 3.0+ only
   glfwWindowHint(GLFW_RESIZABLE, GL_TRUE); // fix window size
@@ -71,8 +72,55 @@ bool App::Init(int wnd_width, int wnd_height, const std::string &title) {
     view_matrix_ = glm::lookAt(eye, at, up);
   }
 
+  InitPlane();
+
   inited_ = true;
   return inited_;
+}
+
+void App::InitPlane() {
+  plane_shader_.InitFromFile("../shader/ground_vs.glsl",
+                             "../shader/ground_fs.glsl");
+  plane_grid_.Init(100.0, 5.0);
+
+  std::vector<float> plane_vertex_data;
+  std::vector<float> plane_normal_data;
+  std::vector<float> plane_color_data;
+  std::vector<float> plane_data;
+
+  plane_grid_.GetData(plane_vertex_data, plane_normal_data, plane_color_data);
+  plane_vertex_num_ = plane_vertex_data.size() / 3;
+
+  int vertex_offset = plane_data.size();
+  plane_data.insert(plane_data.end(), plane_vertex_data.begin(),
+                    plane_vertex_data.end());
+  int normal_offset = plane_data.size();
+  plane_data.insert(plane_data.end(), plane_normal_data.begin(),
+                    plane_normal_data.end());
+  int color_offset = plane_data.size();
+  plane_data.insert(plane_data.end(), plane_color_data.begin(),
+                    plane_color_data.end());
+
+  glGenVertexArrays(1, &plane_vao_);
+  glBindVertexArray(plane_vao_);
+
+  glGenBuffers(1, &plane_vbo_);
+  glBindBuffer(GL_ARRAY_BUFFER, plane_vbo_);
+
+  glBufferData(GL_ARRAY_BUFFER, plane_data.size() * sizeof(float),
+               plane_data.data(), GL_STATIC_DRAW);
+
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0,
+                        (GLvoid *)(vertex_offset * sizeof(float)));
+  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0,
+                        (GLvoid *)(normal_offset * sizeof(float)));
+  glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 0,
+                        (GLvoid *)(color_offset * sizeof(float)));
+  glEnableVertexAttribArray(0);
+  glEnableVertexAttribArray(1);
+  glEnableVertexAttribArray(2);
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+  glBindVertexArray(0);
 }
 
 int App::MainLoop() {
@@ -94,21 +142,20 @@ int App::MainLoop() {
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
+    int display_w, display_h;
+    glfwGetFramebufferSize(window_, &display_w, &display_h);
+    glViewport(0, 0, display_w, display_h);
+    glClearColor(clear_color_.x, clear_color_.y, clear_color_.z,
+                 clear_color_.w);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
     // Video visualizer.
     if (show_video_) {
       img_tex.LoadImage(img);
       RenderVideoPlayer(img_tex, show_video_, video_scale_);
     }
-
     RenderScene();
 
-    int display_w, display_h;
-    glfwGetFramebufferSize(window_, &display_w, &display_h);
-    glViewport(0, 0, display_w, display_h);
-
-    glClearColor(clear_color_.x, clear_color_.y, clear_color_.z,
-                 clear_color_.w);
-    glClear(GL_COLOR_BUFFER_BIT);
     ImGui::Render();
 
     // Frame buffer coord in opengl is
@@ -174,6 +221,35 @@ void App::RenderVideoPlayer(const Texture &tex, bool &open_video, float scale,
   ImGui::End();
 }
 
+void App::RenderPlane(const glm::mat4 &view_matrix,
+                      const glm::mat4 &proj_matrix,
+                      const glm::mat4 &model_matrix) {
+
+  plane_shader_.Use();
+  plane_shader_.Set("model_matrix", model_matrix);
+  plane_shader_.Set("view_matrix", view_matrix);
+  plane_shader_.Set("proj_matrix", proj_matrix);
+  glBindVertexArray(plane_vao_);
+  GLboolean last_enable_depth_test = glIsEnabled(GL_DEPTH_TEST);
+  GLboolean last_enable_multisample = glIsEnabled(GL_MULTISAMPLE);
+
+  glEnable(GL_DEPTH_TEST);
+  glEnable(GL_MULTISAMPLE);
+
+  glEnableVertexAttribArray(0);
+  glEnableVertexAttribArray(1);
+  glEnableVertexAttribArray(2);
+
+  glDrawArrays(GL_TRIANGLES, 0, plane_vertex_num_);
+
+  glBindVertexArray(0);
+
+  if (!last_enable_depth_test)
+    glDisable(GL_DEPTH_TEST);
+  if (!last_enable_multisample)
+    glDisable(GL_MULTISAMPLE);
+}
+
 void App::RenderScene() {
   ImGuiIO &io = ImGui::GetIO();
   if (is_perspective_) {
@@ -225,10 +301,9 @@ void App::RenderScene() {
   ImGui::Text("X: %f Y: %f", io.MousePos.x, io.MousePos.y);
   glm::mat4 grid_model_matrix(1.f);
 
-
-
-  ImGuizmo::DrawCubes(&view_matrix_[0][0], &proj_matrix_[0][0],
-                      &model_matrix_[0][0], 1);
+  // ImGuizmo::DrawCubes(&view_matrix_[0][0], &proj_matrix_[0][0],
+  //                     &model_matrix_[0][0], 1);
+  RenderPlane(view_matrix_, proj_matrix_, model_matrix_);
 
   ImGui::Separator();
   ImGuizmo::SetID(0);
