@@ -149,6 +149,7 @@ int App::MainLoop() {
                  clear_color_.w);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    // Render Some thing include GUI.
     // Video visualizer.
     if (show_video_) {
       img_tex.LoadImage(img);
