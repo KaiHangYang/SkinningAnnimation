@@ -79,17 +79,18 @@ bool App::Init(int wnd_width, int wnd_height, const std::string &title) {
 }
 
 void App::InitPlane() {
-  plane_shader_.InitFromFile("../shader/ground_vs.glsl",
+  plane_render_params_.shader.InitFromFile("../shader/ground_vs.glsl",
                              "../shader/ground_fs.glsl");
-  plane_grid_.Init(100.0, 5.0);
+  Geometry::Grid plane_grid;
+  plane_grid.Init(100.0, 5.0);
 
   std::vector<float> plane_vertex_data;
   std::vector<float> plane_normal_data;
   std::vector<float> plane_color_data;
   std::vector<float> plane_data;
 
-  plane_grid_.GetData(plane_vertex_data, plane_normal_data, plane_color_data);
-  plane_vertex_num_ = plane_vertex_data.size() / 3;
+  plane_grid.GetData(plane_vertex_data, plane_normal_data, plane_color_data);
+  plane_render_params_.vertex_num = plane_vertex_data.size() / 3;
 
   int vertex_offset = plane_data.size();
   plane_data.insert(plane_data.end(), plane_vertex_data.begin(),
@@ -101,11 +102,11 @@ void App::InitPlane() {
   plane_data.insert(plane_data.end(), plane_color_data.begin(),
                     plane_color_data.end());
 
-  glGenVertexArrays(1, &plane_vao_);
-  glBindVertexArray(plane_vao_);
+  glGenVertexArrays(1, &plane_render_params_.vao);
+  glBindVertexArray(plane_render_params_.vao);
 
-  glGenBuffers(1, &plane_vbo_);
-  glBindBuffer(GL_ARRAY_BUFFER, plane_vbo_);
+  glGenBuffers(1, &plane_render_params_.vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, plane_render_params_.vbo);
 
   glBufferData(GL_ARRAY_BUFFER, plane_data.size() * sizeof(float),
                plane_data.data(), GL_STATIC_DRAW);
@@ -226,11 +227,11 @@ void App::RenderPlane(const glm::mat4 &view_matrix,
                       const glm::mat4 &proj_matrix,
                       const glm::mat4 &model_matrix) {
 
-  plane_shader_.Use();
-  plane_shader_.Set("model_matrix", model_matrix);
-  plane_shader_.Set("view_matrix", view_matrix);
-  plane_shader_.Set("proj_matrix", proj_matrix);
-  glBindVertexArray(plane_vao_);
+  plane_render_params_.shader.Use();
+  plane_render_params_.shader.Set("model_matrix", model_matrix);
+  plane_render_params_.shader.Set("view_matrix", view_matrix);
+  plane_render_params_.shader.Set("proj_matrix", proj_matrix);
+  glBindVertexArray(plane_render_params_.vao);
   GLboolean last_enable_depth_test = glIsEnabled(GL_DEPTH_TEST);
   GLboolean last_enable_multisample = glIsEnabled(GL_MULTISAMPLE);
 
@@ -241,7 +242,7 @@ void App::RenderPlane(const glm::mat4 &view_matrix,
   glEnableVertexAttribArray(1);
   glEnableVertexAttribArray(2);
 
-  glDrawArrays(GL_TRIANGLES, 0, plane_vertex_num_);
+  glDrawArrays(GL_TRIANGLES, 0, plane_render_params_.vertex_num);
 
   glBindVertexArray(0);
 

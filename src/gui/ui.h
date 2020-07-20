@@ -38,16 +38,19 @@ private:
   void EditTransform(const float *cameraView, float *cameraProjection,
                      float *matrix, bool editTransformDecomposition);
 
-  // for plane debug
-
-  Shader plane_shader_;
-  Geometry::Grid plane_grid_;
-  GLuint plane_vao_ = 0;
-  GLuint plane_vbo_ = 0;
-  int plane_vertex_num_ = 0;
+  // for plane
+  struct PlaneRenderParams {
+    Shader shader;
+    GLuint vao = 0;
+    GLuint vbo = 0;
+    int vertex_num = 0;
+  };
+  PlaneRenderParams plane_render_params_;
   void InitPlane();
   void RenderPlane(const glm::mat4 &view_matrix, const glm::mat4 &proj_matrix,
                    const glm::mat4 &model_matrix);
+  
+  // for avatar
 
   struct CameraAngle {
     float x = 165.f / 180.f * MY_PI;
