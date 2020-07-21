@@ -136,7 +136,7 @@ void App::InitAvatar() {
   std::string err;
   std::string warn;
   bool ret = false;
-  ret = gltf_ctx.LoadASCIIFromFile(&avatar_model_, &err, &warn, "test.gltf");
+  ret = gltf_ctx.LoadASCIIFromFile(&avatar_model_, &err, &warn, "Fox.gltf");
 
   if (!err.empty()) {
     LOG(ERROR) << err;
@@ -176,11 +176,13 @@ void App::InitAvatar() {
                                             "../shader/avatar_fs.glsl");
 
   for (size_t bv_idx = 0; bv_idx < avatar_model_.bufferViews.size(); ++bv_idx) {
+    if (bv_idx != 0) continue;
+
     const auto &buffer_view = avatar_model_.bufferViews[bv_idx];
-    if (buffer_view.target == 0) {
-      LOG(WARNING) << "buffer_view.target is 0.";
-      continue;
-    }
+    //if (buffer_view.target == 0) {
+    //  LOG(WARNING) << "buffer_view.target is 0.";
+    //  continue;
+    //}
     int sparce_accessor = -1;
     for (size_t a_idx = 0; a_idx < avatar_model_.accessors.size(); ++a_idx) {
       const auto &accessor = avatar_model_.accessors[a_idx];
@@ -196,11 +198,11 @@ void App::InitAvatar() {
         }
       }
     }
-
+    // Only bind POSITION buffer
     const auto &buffer = avatar_model_.buffers[buffer_view.buffer];
     GLuint vbo;
     glGenBuffers(1, &vbo);
-    glBindBuffer(buffer_view.target, vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
     avatar_render_params_.vbos[bv_idx] = vbo;
 
     LOG(INFO) << "Buffer size: " << buffer.data.size()
@@ -283,11 +285,14 @@ void App::RenderAvatarMesh(const tinygltf::Model &model,
 
   for (size_t p_idx = 0; p_idx < mesh.primitives.size(); ++p_idx) {
     const auto& primitive = mesh.primitives[p_idx];
-    if (primitive.indices < 0) continue;
+    //if (primitive.indices < 0) continue;
     auto p_iter = primitive.attributes.begin();
     auto p_iter_end = primitive.attributes.end();
 
+    int j_size = 0;
     for (; p_iter != p_iter_end; ++p_iter) {
+      if (p_iter->first != "POSITION") continue;
+
       CHECK(p_iter->second >= 0) << "Primitive accessor must > 0";
       const auto& accessor = model.accessors[p_iter->second];
       glBindBuffer(GL_ARRAY_BUFFER, avatar_render_params_.vbos[accessor.bufferView]);
@@ -313,9 +318,11 @@ void App::RenderAvatarMesh(const tinygltf::Model &model,
         glVertexAttribPointer(0, size, accessor.componentType, accessor.normalized ? GL_TRUE : GL_FALSE, byte_stride, (GLvoid*)(accessor.byteOffset));
         glEnableVertexAttribArray(0);
       }
+
+      j_size = accessor.count;
     }
-    const auto& index_accessor = model.accessors[primitive.indices];
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, avatar_render_params_.vbos[index_accessor.bufferView]);
+    //const auto& index_accessor = model.accessors[primitive.indices];
+    //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, avatar_render_params_.vbos[index_accessor.bufferView]);
 
     int mode = -1;
     if (primitive.mode == TINYGLTF_MODE_TRIANGLES) {
@@ -340,10 +347,11 @@ void App::RenderAvatarMesh(const tinygltf::Model &model,
       CHECK(0) << "primitive.mode is invalid!";
     }
 
-    glDrawElements(mode, index_accessor.count, index_accessor.componentType, (GLvoid*)(index_accessor.byteOffset));
+    //glDrawElements(mode, index_accessor.count, index_accessor.componentType, (GLvoid*)(index_accessor.byteOffset));
+    glDrawArrays(mode, 0, j_size);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     glDisableVertexAttribArray(0);
   }
 }
@@ -543,7 +551,7 @@ void App::RenderScene() {
   if (is_perspective_) {
     proj_matrix_ =
         glm::perspective(fov_ / 180.f * MY_PI,
-                         io.DisplaySize.x / io.DisplaySize.y, 0.001f, 100.f);
+                         io.DisplaySize.x / io.DisplaySize.y, 0.001f, 10000.f);
   } else {
     float view_height = view_width_ * io.DisplaySize.y / io.DisplaySize.x;
     proj_matrix_ = glm::ortho(-view_width_, view_width_, -view_height,
@@ -574,7 +582,7 @@ void App::RenderScene() {
     ImGui::SliderFloat("Ortho width", &view_width_, 1, 20);
   }
   bool view_dirty =
-      ImGui::SliderFloat("Distance", &camera_distance_, 3.f, 30.f);
+      ImGui::SliderFloat("Distance", &camera_distance_, 3.f, 200.f);
   if (view_dirty) {
     // Set view_matrix_
     glm::vec3 eye{
