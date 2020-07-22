@@ -12,11 +12,11 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/videoio.hpp>
-#include <tiny_gltf.h>
 
 #include "common/utility.h"
 #include "graphic/geometry.h"
 #include "graphic/shader.h"
+#include "graphic/model.h"
 #include "graphic/texture.h"
 #include "gui/imgui_impl_glfw.h"
 #include "gui/imgui_impl_opengl3.h"
@@ -52,18 +52,8 @@ private:
                    const glm::mat4 &model_matrix);
   
   // for avatar
-  struct AvatarRenderParams {
-    Shader shader;
-    GLuint vao = 0;
-    std::map<int, GLuint> vbos;
-  };
-  void InitAvatar();
-  void RenderAvatar(const glm::mat4& view_matrix, const glm::mat4& proj_matrix, const glm::mat4& model_matrix);
-  void RenderAvatarNode(const tinygltf::Model &model, const tinygltf::Node& node, const glm::mat4& parent_transform);
-  void RenderAvatarMesh(const tinygltf::Model& model, const tinygltf::Mesh& mesh, const glm::mat4& parent_transform);
-  tinygltf::Model avatar_model_;
-  AvatarRenderParams avatar_render_params_;
-
+  Model avatar_model_;
+  
   struct CameraAngle {
     float x = 165.f / 180.f * MY_PI;
     float y = 32.f / 180.f * MY_PI;
