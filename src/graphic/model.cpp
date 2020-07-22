@@ -110,13 +110,59 @@ void Model::Init(const std::string &model_path,
         cur_render_params.draw_type = DRAW_ARRAY;
       }
 
+      // Load textures.
+      if (primitive.material >= 0) {
+        const auto &material = model_.materials[primitive.material];
+        if (material.pbrMetallicRoughness.baseColorTexture.index >= 0) {
+          // Load image as texture.
+          const auto &texture = model_.textures[material.pbrMetallicRoughness
+                                                    .baseColorTexture.index];
+          const auto &sampler = model_.samplers[texture.sampler];
+          const auto &image = model_.images[texture.source];
+
+          glGenTextures(1, &cur_render_params.texture_id);glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+          glBindTexture(GL_TEXTURE_2D, cur_render_params.texture_id);
+          glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                          sampler.minFilter);
+          glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+                          sampler.magFilter);
+          GLenum format = GL_RGBA;
+          if (image.component == 3) {
+            format = GL_RGB;
+          }
+
+          GLenum type = GL_UNSIGNED_BYTE;
+          if (image.bits == 8) {
+            type = GL_UNSIGNED_BYTE;
+          } else if (image.bits == 16) {
+            type = GL_UNSIGNED_SHORT;
+          } else if (image.bits == 32) {
+            type = GL_UNSIGNED_INT;
+          } else {
+            CHECK(0) << "Don't support image.bits: " << image.bits;
+          }
+          glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+          glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0,
+                       format, type, image.image.data());
+          glGenerateMipmap(GL_TEXTURE_2D);
+          glBindTexture(GL_TEXTURE_2D, 0);
+          // model_.samplers
+        } else {
+          if (!material.pbrMetallicRoughness.baseColorFactor.empty()) {
+            cur_render_params.color =
+                glm::vec4(material.pbrMetallicRoughness.baseColorFactor[0],
+                          material.pbrMetallicRoughness.baseColorFactor[1],
+                          material.pbrMetallicRoughness.baseColorFactor[2],
+                          material.pbrMetallicRoughness.baseColorFactor[3]);
+          }
+          else {
+            cur_render_params.color = glm::vec4(0.5, 0.5, 0.5, 1.0);
+          }
+        }
+      }
+
       mesh_render_params_[m_idx].push_back(cur_render_params);
       glBindVertexArray(0);
-
-      // Load textures.
-      if (primitive.material < 0) continue;
-      const auto& material = model_.materials[primitive.material];
-      std::cout << "I am just tring!" << std::endl;
     }
   }
 }
@@ -227,6 +273,21 @@ void Model::RenderMesh(int mesh_idx) {
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
     glEnableVertexAttribArray(2);
+
+    if (render_params.texture_id) {
+      // Enable texture sampler.
+      
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, render_params.texture_id);
+
+      shader_->Set("has_texture", true);
+      shader_->Set("diffuse_texture", 0);
+    }
+    else {
+      shader_->Set("has_texture", false);
+      shader_->Set("vertex_color", render_params.color);
+    } 
+    
     if (render_params.draw_type == DRAW_ARRAY) {
       glDrawArrays(mode, 0, render_params.count);
     } else if (render_params.draw_type == DRAW_ELEMENT) {
@@ -239,6 +300,7 @@ void Model::RenderMesh(int mesh_idx) {
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glDisableVertexAttribArray(0);
     glDisableVertexAttribArray(1);
     glDisableVertexAttribArray(2);

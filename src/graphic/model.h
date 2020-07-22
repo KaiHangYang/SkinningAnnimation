@@ -27,6 +27,8 @@ private:
     GLuint texcoord_vbo = 0;
     GLuint normal_vbo = 0;
     GLuint indices_vbo = 0;
+    GLuint texture_id = 0;
+    glm::vec4 color = glm::vec4(0.5, 0.5, 0.5, 1.0);
   };
 
   void RenderNode(const tinygltf::Node& node, const glm::mat4& parent_transform);

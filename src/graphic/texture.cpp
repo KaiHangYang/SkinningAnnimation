@@ -7,6 +7,7 @@ Texture::Texture() {
 
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glBindTexture(GL_TEXTURE_2D, texture_id_);
 }
 
 Texture::~Texture() {
@@ -22,6 +23,7 @@ GLuint Texture::GetId() const {
 }
 
 bool Texture::LoadImage(const cv::Mat &img) {
+  glBindTexture(GL_TEXTURE_2D, texture_id_);
   if (img.cols <= 0 && img.rows <= 0) {
     LOG(WARNING) << "Texture: input image is invalid!";
     return false;
@@ -44,6 +46,8 @@ bool Texture::LoadImage(const cv::Mat &img) {
   glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.cols, img.rows, 0, external_formate,
                GL_UNSIGNED_BYTE, img.data);
+
+  glBindTexture(GL_TEXTURE_2D, 0);
 
   return true;
 }

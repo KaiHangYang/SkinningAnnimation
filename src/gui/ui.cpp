@@ -77,7 +77,8 @@ bool App::Init(int wnd_width, int wnd_height, const std::string &title) {
   std::shared_ptr<Shader> avatar_shader = std::make_shared<Shader>();
   avatar_shader->InitFromFile("../shader/avatar_vs.glsl",
     "../shader/avatar_fs.glsl");
-  avatar_model_.Init("Fox.gltf", avatar_shader);
+  avatar_model_.Init("BrainStem.gltf", avatar_shader);
+  avatar_model_matrix_ = glm::mat4(1.f);
 
   inited_ = true;
   return inited_;
@@ -311,11 +312,11 @@ void App::RenderScene() {
   // ImGuizmo::DrawCubes(&view_matrix_[0][0], &proj_matrix_[0][0],
   //                     &model_matrix_[0][0], 1);
   RenderPlane(view_matrix_, proj_matrix_, model_matrix_);
-  avatar_model_.Render(view_matrix_, proj_matrix_, model_matrix_);
+  avatar_model_.Render(view_matrix_, proj_matrix_, model_matrix_*avatar_model_matrix_);
 
   ImGui::Separator();
   ImGuizmo::SetID(0);
-  EditTransform(&view_matrix_[0][0], &proj_matrix_[0][0], &model_matrix_[0][0],
+  EditTransform(&view_matrix_[0][0], &proj_matrix_[0][0], &avatar_model_matrix_[0][0],
                 true);
   ImGui::End();
 

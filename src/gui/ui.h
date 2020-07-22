@@ -53,6 +53,7 @@ private:
   
   // for avatar
   Model avatar_model_;
+  glm::mat4 avatar_model_matrix_;
   
   struct CameraAngle {
     float x = 165.f / 180.f * MY_PI;
