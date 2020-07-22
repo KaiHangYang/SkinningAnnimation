@@ -10,8 +10,10 @@
 #include "graphic/model.h"
 
 void Model::Init(const std::string &model_path,
-                 const std::shared_ptr<Shader> &shader) {
-  shader_ = shader;
+                 const std::shared_ptr<Shader> &shader_tex,
+  const std::shared_ptr<Shader>& shader_notex) {
+  shader_tex_ = shader_tex;
+  shader_notex_ = shader_notex;
 
   // Load models.
   tinygltf::TinyGLTF gltf_ctx;
@@ -169,10 +171,16 @@ void Model::Init(const std::string &model_path,
 
 void Model::Render(const glm::mat4 &view_matrix, const glm::mat4 &proj_matrix,
                    const glm::mat4 &model_matrix) {
-  shader_->Use();
-  shader_->Set("model_matrix", model_matrix);
-  shader_->Set("view_matrix", view_matrix);
-  shader_->Set("proj_matrix", proj_matrix);
+  shader_tex_->Use();
+  shader_tex_->Set("model_matrix", model_matrix);
+  shader_tex_->Set("view_matrix", view_matrix);
+  shader_tex_->Set("proj_matrix", proj_matrix);
+
+  shader_notex_->Use();
+  shader_notex_->Set("model_matrix", model_matrix);
+  shader_notex_->Set("view_matrix", view_matrix);
+  shader_notex_->Set("proj_matrix", proj_matrix);
+
   GLboolean last_enable_depth_test = glIsEnabled(GL_DEPTH_TEST);
   GLboolean last_enable_multisample = glIsEnabled(GL_MULTISAMPLE);
 
@@ -279,14 +287,14 @@ void Model::RenderMesh(int mesh_idx) {
       
       glActiveTexture(GL_TEXTURE0);
       glBindTexture(GL_TEXTURE_2D, render_params.texture_id);
-
-      shader_->Set("has_texture", true);
-      shader_->Set("diffuse_texture", 0);
+      shader_tex_->Use();
+      shader_tex_->Set("diffuse_texture", 0);
+      
     }
     else {
-      shader_->Set("has_texture", false);
-      shader_->Set("vertex_color", render_params.color);
-    } 
+      shader_notex_->Use();
+      shader_notex_->Set("vertex_color", render_params.color);
+    }
     
     if (render_params.draw_type == DRAW_ARRAY) {
       glDrawArrays(mode, 0, render_params.count);

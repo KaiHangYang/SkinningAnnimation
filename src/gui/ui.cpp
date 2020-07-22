@@ -74,10 +74,13 @@ bool App::Init(int wnd_width, int wnd_height, const std::string &title) {
   }
 
   InitPlane();
-  std::shared_ptr<Shader> avatar_shader = std::make_shared<Shader>();
-  avatar_shader->InitFromFile("../shader/avatar_vs.glsl",
-    "../shader/avatar_fs.glsl");
-  avatar_model_.Init("BrainStem.gltf", avatar_shader);
+  std::shared_ptr<Shader> avatar_shader_tex = std::make_shared<Shader>();
+  std::shared_ptr<Shader> avatar_shader_notex = std::make_shared<Shader>();
+  avatar_shader_tex->InitFromFile("../shader/avatar_tex_vs.glsl",
+    "../shader/avatar_tex_fs.glsl");
+  avatar_shader_notex->InitFromFile("../shader/avatar_notex_vs.glsl",
+    "../shader/avatar_notex_fs.glsl");
+  avatar_model_.Init("../resource/BrainStem/BrainStem.gltf", avatar_shader_tex, avatar_shader_notex);
   avatar_model_matrix_ = glm::mat4(1.f);
 
   inited_ = true;

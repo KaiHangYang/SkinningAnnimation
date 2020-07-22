@@ -14,7 +14,7 @@ class Model {
 public:
   enum DrawType {DRAW_ARRAY = 0, DRAW_ELEMENT = 1};
   Model() = default;
-  void Init(const std::string &model_path, const std::shared_ptr<Shader> &shader);
+  void Init(const std::string &model_path, const std::shared_ptr<Shader> &shader_tex, const std::shared_ptr<Shader>&shader_notex);
   void Render(const glm::mat4& view_matrix, const glm::mat4& proj_matrix, const glm::mat4& model_matrix);
   ~Model(){};
 
@@ -36,7 +36,9 @@ private:
   GLuint ProcessBufferView(const tinygltf::Accessor& accessor, GLenum buffer_type);
   size_t GLTFComponentByteSize(int type);
   tinygltf::Model model_;
-  std::shared_ptr<Shader> shader_;
+
+  std::shared_ptr<Shader> shader_tex_;
+  std::shared_ptr<Shader> shader_notex_;
 
   std::map<int, std::vector<RenderParams>> mesh_render_params_;
   std::map<int, GLuint> gpu_buffer_views_;
