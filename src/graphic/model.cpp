@@ -11,7 +11,7 @@
 
 void Model::Init(const std::string &model_path,
                  const std::shared_ptr<Shader> &shader_tex,
-  const std::shared_ptr<Shader>& shader_notex) {
+                 const std::shared_ptr<Shader> &shader_notex) {
   shader_tex_ = shader_tex;
   shader_notex_ = shader_notex;
 
@@ -122,7 +122,8 @@ void Model::Init(const std::string &model_path,
           const auto &sampler = model_.samplers[texture.sampler];
           const auto &image = model_.images[texture.source];
 
-          glGenTextures(1, &cur_render_params.texture_id);glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+          glGenTextures(1, &cur_render_params.texture_id);
+          glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
           glBindTexture(GL_TEXTURE_2D, cur_render_params.texture_id);
           glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
                           sampler.minFilter);
@@ -156,8 +157,7 @@ void Model::Init(const std::string &model_path,
                           material.pbrMetallicRoughness.baseColorFactor[1],
                           material.pbrMetallicRoughness.baseColorFactor[2],
                           material.pbrMetallicRoughness.baseColorFactor[3]);
-          }
-          else {
+          } else {
             cur_render_params.color = glm::vec4(0.5, 0.5, 0.5, 1.0);
           }
         }
@@ -284,18 +284,17 @@ void Model::RenderMesh(int mesh_idx) {
 
     if (render_params.texture_id) {
       // Enable texture sampler.
-      
+
       glActiveTexture(GL_TEXTURE0);
       glBindTexture(GL_TEXTURE_2D, render_params.texture_id);
       shader_tex_->Use();
       shader_tex_->Set("diffuse_texture", 0);
-      
-    }
-    else {
+
+    } else {
       shader_notex_->Use();
       shader_notex_->Set("vertex_color", render_params.color);
     }
-    
+
     if (render_params.draw_type == DRAW_ARRAY) {
       glDrawArrays(mode, 0, render_params.count);
     } else if (render_params.draw_type == DRAW_ELEMENT) {
@@ -389,4 +388,311 @@ GLuint Model::ProcessBufferView(const tinygltf::Accessor &accessor,
   glBindBuffer(buffer_type, 0);
 
   return vbo;
+}
+
+Skeleton::Skeleton(const std::vector<SkeletonNode::Ptr> &input_bone_array)
+    : bone_array_(input_bone_array) {
+  for (auto bone_ptr : bone_array_) {
+    bone_name2index_map[bone_ptr->name_] = bone_ptr->idx_;
+  }
+  this->BuildGraph();
+}
+
+Skeleton Skeleton::Copy() const {
+  std::vector<SkeletonNode::Ptr> new_bone_array;
+  for (const auto &cur_bone_ptr : bone_array_) {
+    new_bone_array.push_back(STLMakeSharedOfEigenTypes<SkeletonNode>(
+        cur_bone_ptr->idx_, cur_bone_ptr->parent_idx_, cur_bone_ptr->name_,
+        cur_bone_ptr->local_mat_, cur_bone_ptr->global_mat_));
+  }
+  return Skeleton(new_bone_array);
+}
+
+glm::vec3 Skeleton::GetRootTrans() const {
+  return glm::vec3(root_->left_node_->global_mat_(0, 3),
+                   root_->left_node_->global_mat_(1, 3),
+                   root_->left_node_->global_mat_(2, 3));
+}
+
+void Skeleton::BuildGraph() {
+  CHECK(!this->graph_inited) << "graph is already initialized.";
+  root_ = STLMakeSharedOfEigenTypes<SkeletonNode>(
+      -1, -1, "", Eigen::Matrix4f::Identity(), Eigen::Matrix4f::Identity());
+  for (auto i = 0; i < this->bone_array_.size(); i++) {
+    auto &cur_bone_ptr = this->bone_array_[i];
+    SkeletonNode::Ptr parent_ptr;
+    if (cur_bone_ptr->parent_idx_ == -1) {
+      parent_ptr = root_;
+    } else {
+      parent_ptr = this->bone_array_[cur_bone_ptr->parent_idx_];
+    }
+    if (parent_ptr->left_node_ == nullptr) {
+      parent_ptr->left_node_ = cur_bone_ptr;
+    } else {
+      cur_bone_ptr->right_node_ = parent_ptr->left_node_;
+      parent_ptr->left_node_ = cur_bone_ptr;
+    }
+  }
+  this->graph_inited = true;
+}
+
+void Skeleton::UpdateGlobalPose() {
+  // Use depth first search to update global matrix.
+  STLVectorOfEigenTypes<std::pair<SkeletonNode::Ptr, Eigen::Matrix4f>> s;
+  s.push_back(std::make_pair(root_->left_node_, Eigen::Matrix4f::Identity()));
+
+  while (!s.empty()) {
+    SkeletonNode::Ptr cur_node = s.back().first;
+    Eigen::Matrix4f global_transfrom = s.back().second;
+    s.pop_back();
+
+    // push brother node.
+    if (cur_node->right_node_ != nullptr) {
+      s.push_back(std::make_pair(cur_node->right_node_, global_transfrom));
+    }
+    Eigen::Matrix4f rest_mat = cur_node->local_mat_;
+    global_transfrom = global_transfrom * rest_mat;
+    cur_node->global_mat_ = global_transfrom;
+    if (cur_node->left_node_ != nullptr) {
+      s.push_back(std::make_pair(cur_node->left_node_, global_transfrom));
+    }
+  }
+}
+
+void Skeleton::SetLocalPose(const std::vector<float> &transform_array) {
+  CHECK(!bone_array_.empty()) << "Bonemap is not inited!";
+  int mat_size = bone_array_[0]->local_mat_.size();
+  CHECK(transform_array.size() == bone_array_.size() * mat_size)
+      << "transform_array size is invalid: " << transform_array.size()
+      << "(wish " << bone_array_.size() * mat_size << ").";
+
+  for (int b_idx = 0; b_idx < bone_array_.size(); ++b_idx) {
+    bone_array_[b_idx]->local_mat_ =
+        Eigen::Map<const Eigen::Matrix4f>(&transform_array[b_idx * mat_size]);
+  }
+}
+
+void Skeleton::GetGlobalKeypoints(
+    const std::vector<std::string> &keypoint_names,
+    std::vector<glm::vec3> &keypoints) {
+  keypoints.clear();
+  UpdateGlobalPose();
+  for (auto cur_name : keypoint_names) {
+    auto cur_bone = bone_array_[bone_name2index_map[cur_name]];
+    keypoints.push_back(glm::vec3(cur_bone->global_mat_(0, 3),
+                                  cur_bone->global_mat_(1, 3),
+                                  cur_bone->global_mat_(2, 3)));
+  }
+}
+
+Skeleton
+Skeleton::Split(const std::vector<std::string> &skeleton_ordered_name) const {
+  std::vector<bool> skeleton_valid(this->bone_array_.size(), false);
+  std::map<int, int> oldIdx2newIdx_map;
+  std::vector<SkeletonNode::Ptr> new_bone_array(skeleton_ordered_name.size());
+
+  for (auto i = 0; i < skeleton_ordered_name.size(); i++) {
+    auto bone_name = skeleton_ordered_name[i];
+    CHECK(this->bone_name2index_map.find(bone_name) !=
+          this->bone_name2index_map.end())
+        << "can't find bone " << bone_name;
+    auto cur_idx = this->bone_name2index_map.at(bone_name);
+    skeleton_valid[cur_idx] = true;
+    oldIdx2newIdx_map[cur_idx] = i;
+  }
+  for (auto i = 0; i < this->bone_array_.size(); i++) {
+    auto bone_ptr = this->bone_array_[i];
+    if (!skeleton_valid[i])
+      continue;
+
+    auto new_idx = oldIdx2newIdx_map[i];
+    auto old_parent_idx = bone_ptr->parent_idx_;
+    Eigen::Matrix4f local_mat = bone_ptr->local_mat_;
+    int new_parent_idx = -1;
+    while (old_parent_idx != -1) {
+      auto parent_ptr = this->bone_array_[old_parent_idx];
+      if (skeleton_valid[old_parent_idx]) {
+        new_parent_idx = oldIdx2newIdx_map[old_parent_idx];
+        break;
+      } else {
+        local_mat = parent_ptr->local_mat_ * local_mat;
+        old_parent_idx = parent_ptr->parent_idx_;
+      }
+    }
+    new_parent_idx =
+        (old_parent_idx == -1) ? -1 : oldIdx2newIdx_map[old_parent_idx];
+
+    new_bone_array[new_idx] = STLMakeSharedOfEigenTypes<SkeletonNode>(
+        new_idx, new_parent_idx, this->bone_array_[i]->name_, local_mat,
+        this->bone_array_[i]->global_mat_);
+  }
+  Skeleton result(new_bone_array);
+  result.UpdateGlobalPose();
+  return result;
+}
+
+Skeleton Skeleton::UpdateTransform(
+    const std::vector<std::string> &ordered_names,
+    const STLVectorOfEigenTypes<Eigen::Matrix4f> &transforms) const {
+  CHECK(ordered_names.size() == transforms.size())
+      << ordered_names.size() << ", " << transforms.size();
+  std::vector<SkeletonNode::Ptr> new_bone_array(this->bone_array_.size(),
+                                                nullptr);
+
+  for (auto i = 0; i < new_bone_array.size(); i++) {
+    new_bone_array[i] = STLMakeSharedOfEigenTypes<SkeletonNode>(
+        this->bone_array_[i]->idx_, this->bone_array_[i]->parent_idx_,
+        this->bone_array_[i]->name_, this->bone_array_[i]->local_mat_,
+        this->bone_array_[i]->global_mat_);
+  }
+  for (auto i = 0; i < ordered_names.size(); i++) {
+    auto bone_name = ordered_names[i];
+    auto transform = transforms[i];
+    auto iter = this->bone_name2index_map.find(bone_name);
+    CHECK(iter != this->bone_name2index_map.end())
+        << "can't find bone " << bone_name;
+    auto cur_idx = iter->second;
+    new_bone_array[cur_idx]->local_mat_ =
+        new_bone_array[cur_idx]->local_mat_ * transform;
+  }
+  Skeleton result(new_bone_array);
+  result.UpdateGlobalPose();
+  return result;
+}
+
+void Skeleton::SetBoneTranslation(const glm::vec3 &translation,
+                                  const std::string &bone_name) {
+  bone_array_[this->bone_name2index_map.at(bone_name)]->local_mat_.block(0, 3,
+                                                                         3, 1)
+      << translation.x,
+      translation.y, translation.z;
+}
+
+void Skeleton::AddFakedBoneNode(
+    const std::vector<std::string> &bone_names,
+    const std::vector<std::string> &parent_names,
+    const STLVectorOfEigenTypes<Eigen::Matrix4f> &rest_mats) {
+  int cur_offset = this->bone_array_.size();
+  for (auto i = 0; i < bone_names.size(); i++) {
+    auto iter = this->bone_name2index_map.find(parent_names[i]);
+    CHECK(iter != this->bone_name2index_map.end())
+        << "can't find bone " << parent_names[i];
+    this->bone_name2index_map[bone_names[i]] = cur_offset;
+    SkeletonNode::Ptr parent_ptr = this->bone_array_[iter->second];
+
+    SkeletonNode::Ptr new_bone_ptr = STLMakeSharedOfEigenTypes<SkeletonNode>(
+        cur_offset++, iter->second, bone_names[i], rest_mats[i],
+        parent_ptr->global_mat_ * rest_mats[i]);
+
+    if (parent_ptr->left_node_ == nullptr) {
+      parent_ptr->left_node_ = new_bone_ptr;
+    } else {
+      new_bone_ptr->right_node_ = parent_ptr->left_node_;
+      parent_ptr->left_node_ = new_bone_ptr;
+    }
+    this->bone_array_.emplace_back(new_bone_ptr);
+  }
+}
+
+void Skeleton::GetLocalTransform(std::vector<float> &transform_array) {
+  CHECK(!bone_array_.empty()) << "Bonemap hasn't been inited!";
+  int mat_size = bone_array_[0]->local_mat_.size();
+  std::vector<float> cur_transform_array(mat_size * bone_array_.size());
+
+  for (int b_idx = 0; b_idx < bone_array_.size(); ++b_idx) {
+    std::copy(bone_array_[b_idx]->local_mat_.data(),
+              bone_array_[b_idx]->local_mat_.data() +
+                  bone_array_[b_idx]->local_mat_.size(),
+              &cur_transform_array[mat_size * b_idx]);
+  }
+  transform_array = cur_transform_array;
+}
+
+void Skeleton::SetBoneTranslation(const std::string &bone_name,
+                                  const glm::vec3 &translation,
+                                  std::vector<float> &transform_array) {
+  auto bone_iter = bone_name2index_map.find(bone_name);
+  CHECK(bone_iter != bone_name2index_map.end())
+      << "Bonename : " << bone_name << " doesn't exist in bone_array!";
+  Eigen::Matrix4f cur_transform_matrix(
+      &transform_array[16 * bone_iter->second]);
+  cur_transform_matrix.block(0, 3, 3, 1) << translation.x, translation.y,
+      translation.z;
+  std::copy(cur_transform_matrix.data(),
+            cur_transform_matrix.data() + cur_transform_matrix.size(),
+            &transform_array[16 * bone_iter->second]);
+}
+
+void Skeleton::ConvertLocalRotationToGlobalRotation(
+    const STLVectorOfEigenTypes<Eigen::Matrix4f> &local_rotation_mats,
+    STLVectorOfEigenTypes<Eigen::Matrix4f> &global_rotation_mats) {
+  CHECK(local_rotation_mats.size() == bone_array_.size())
+      << "local_rotation_mats size(" << local_rotation_mats.size()
+      << ") doesn't match bone_array size(" << bone_array_.size() << ")";
+  global_rotation_mats.resize(local_rotation_mats.size(),
+                              Eigen::Matrix4f::Identity());
+  for (int b_idx = 0; b_idx < bone_array_.size(); ++b_idx) {
+    // Remove the offset, and convert local rotation to global rotaiton.
+    Eigen::Matrix4f global_mat = Eigen::Matrix4f::Identity();
+    global_mat.block(0, 0, 3, 3) =
+        bone_array_[b_idx]->global_mat_.block(0, 0, 3, 3);
+    // local_rotation_mats is use on local_vec, to make it global,
+    // I need use local_vec = global_mat.inverse() * global_vec
+    // So global rotation (use on global vec and under global coordinate) is
+    // global_mat * local_rotation_mats[b_idx] * global_mat.inverse().
+    global_rotation_mats[b_idx] =
+        global_mat * local_rotation_mats[b_idx] * global_mat.inverse();
+  }
+}
+
+std::vector<float> Skeleton::CalculateLocalTransform(
+    const STLVectorOfEigenTypes<Eigen::Matrix4f> &rotation_mats,
+    const glm::vec3 &root_trans) {
+  std::vector<float> transform_array(16 * this->bone_array_.size(), 0);
+  for (int t_idx = 0; t_idx < this->bone_array_.size(); ++t_idx) {
+    transform_array[16 * t_idx + 4 * 0 + 0] = 1.f;
+    transform_array[16 * t_idx + 4 * 1 + 1] = 1.f;
+    transform_array[16 * t_idx + 4 * 2 + 2] = 1.f;
+    transform_array[16 * t_idx + 4 * 3 + 3] = 1.f;
+  }
+
+  int root_idx = this->bone_name2index_map["Root_M"];
+  Eigen::Matrix4f root_mat = this->bone_array_[root_idx]->local_mat_;
+  root_mat.block(0, 3, 3, 1) << root_trans.x, root_trans.y, root_trans.z;
+  for (auto i = 0; i < this->bone_array_.size(); i++) {
+    auto bone_ptr = this->bone_array_[i];
+    Eigen::Matrix4f local_mat = bone_ptr->local_mat_;
+    if (bone_ptr->name_ == "Root_M") {
+      root_mat = root_mat * rotation_mats[i];
+      local_mat = root_mat;
+    } else {
+      local_mat = local_mat * rotation_mats[i];
+    }
+    std::copy(local_mat.data(), local_mat.data() + local_mat.size(),
+              transform_array.begin() + local_mat.size() * i);
+  }
+  return transform_array;
+}
+
+void Skeleton::ExtractModelMatrix(std::vector<float> &transform_array,
+                                  std::vector<float> &model_matrix,
+                                  bool is_stable) {
+  int root_idx = this->bone_name2index_map["Root_M"];
+  Eigen::Matrix4f root_transform(&transform_array[16 * root_idx]);
+
+  Eigen::Matrix4f mat = Eigen::Matrix4f::Identity();
+  if (!model_matrix.empty()) {
+    mat = Eigen::Matrix4f(model_matrix.data());
+  }
+
+  if (!is_stable) {
+    mat = root_transform * bone_array_[root_idx]->local_mat_.inverse();
+  }
+
+  root_transform = mat.inverse() * root_transform;
+
+  model_matrix = std::vector<float>(mat.data(), mat.data() + mat.size());
+  std::copy(root_transform.data(),
+            root_transform.data() + root_transform.size(),
+            &transform_array[16 * root_idx]);
 }

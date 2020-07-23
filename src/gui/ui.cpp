@@ -1,6 +1,7 @@
-#include <glm/gtc/matrix_transform.hpp>
 #include <glm/common.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <memory>
+
 
 #include "common/logging.h"
 #include "gui/ui.h"
@@ -77,10 +78,11 @@ bool App::Init(int wnd_width, int wnd_height, const std::string &title) {
   std::shared_ptr<Shader> avatar_shader_tex = std::make_shared<Shader>();
   std::shared_ptr<Shader> avatar_shader_notex = std::make_shared<Shader>();
   avatar_shader_tex->InitFromFile("../shader/avatar_tex_vs.glsl",
-    "../shader/avatar_tex_fs.glsl");
+                                  "../shader/avatar_tex_fs.glsl");
   avatar_shader_notex->InitFromFile("../shader/avatar_notex_vs.glsl",
-    "../shader/avatar_notex_fs.glsl");
-  avatar_model_.Init("../resource/BrainStem/BrainStem.gltf", avatar_shader_tex, avatar_shader_notex);
+                                    "../shader/avatar_notex_fs.glsl");
+  avatar_model_.Init("../resource/SimpleSkinning/SimpleSkinning.gltf",
+                     avatar_shader_tex, avatar_shader_notex);
   avatar_model_matrix_ = glm::mat4(1.f);
 
   inited_ = true;
@@ -312,15 +314,14 @@ void App::RenderScene() {
   ImGui::Text("X: %f Y: %f", io.MousePos.x, io.MousePos.y);
   glm::mat4 grid_model_matrix(1.f);
 
-  // ImGuizmo::DrawCubes(&view_matrix_[0][0], &proj_matrix_[0][0],
-  //                     &model_matrix_[0][0], 1);
   RenderPlane(view_matrix_, proj_matrix_, model_matrix_);
-  avatar_model_.Render(view_matrix_, proj_matrix_, model_matrix_*avatar_model_matrix_);
+  avatar_model_.Render(view_matrix_, proj_matrix_,
+                       model_matrix_ * avatar_model_matrix_);
 
   ImGui::Separator();
   ImGuizmo::SetID(0);
-  EditTransform(&view_matrix_[0][0], &proj_matrix_[0][0], &avatar_model_matrix_[0][0],
-                true);
+  EditTransform(&view_matrix_[0][0], &proj_matrix_[0][0],
+                &avatar_model_matrix_[0][0], true);
   ImGui::End();
 
   ImGuizmo::ViewManipulate(&view_matrix_[0][0], camera_distance_,

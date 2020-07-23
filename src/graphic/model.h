@@ -8,7 +8,156 @@
 #include <set>
 #include <glm/glm.hpp>
 
+#include "common/utility.h"
 #include "graphic/shader.h"
+
+// Define the skeleton 
+class SkeletonNode {
+ public:
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+  using Ptr = std::shared_ptr<SkeletonNode>;
+
+  SkeletonNode() = delete;
+  SkeletonNode(int index, int parent_idx, const std::string& name,
+                const Eigen::Matrix4f& rest_mat,
+                const Eigen::Matrix4f& global_mat)
+      : idx_(index),
+        parent_idx_(parent_idx),
+        name_(name),
+        local_mat_(rest_mat),
+        global_mat_(global_mat) {}
+  ~SkeletonNode() = default;
+
+  const int idx_;
+  const int parent_idx_;
+  const std::string name_;
+  Eigen::Matrix4f local_mat_;
+  Eigen::Matrix4f global_mat_;
+
+  // left node for first child.
+  Ptr left_node_ = nullptr;
+  // right node for brother.
+  Ptr right_node_ = nullptr;
+};
+
+class Skeleton {
+ public:
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+  Skeleton() = default;
+  ~Skeleton() = default;
+
+  Skeleton Copy() const;
+
+  void UpdateGlobalPose();
+  void SetLocalPose(const std::vector<float>& transform_array);
+
+  void GetGlobalKeypoints(const std::vector<std::string>& keypoint_names,
+                          std::vector<glm::vec3>& keypoints);
+
+  // split current skeleton into smaller one
+  Skeleton Split(
+      const std::vector<std::string>& skeleton_ordered_name) const;
+
+  Skeleton UpdateTransform(
+      const std::vector<std::string>& ordered_names,
+      const STLVectorOfEigenTypes<Eigen::Matrix4f>& transforms) const;
+
+  void SetBoneTranslation(const glm::vec3& translation,
+                          const std::string& bone_names);
+
+  int GetBoneNum() const { return bone_array_.size(); }
+
+  glm::vec3 GetRootTrans() const;
+
+  // recover pose by eular angle.
+  template <typename T>
+  void RecoverPose(Eigen::Matrix<T, Eigen::Dynamic, 3>& result_pose,
+                   const std::vector<T>& params = {},
+                   const std::vector<Eigen::Vector3d>& bone_transforms = {},
+                   bool use_xyz = true) const {
+    STLVectorOfEigenTypes<std::pair<SkeletonNode::Ptr, Eigen::Matrix<T, 4, 4>>>
+        queue;
+    queue.push_back(
+        std::make_pair(root_->left_node_, Eigen::Matrix<T, 4, 4>::Identity()));
+    while (!queue.empty()) {
+      SkeletonNode::Ptr cur_node = queue.back().first;
+      Eigen::Matrix<T, 4, 4> global_transform = queue.back().second;
+      queue.pop_back();
+
+      if (cur_node->right_node_ != nullptr) {
+        queue.push_back(
+            std::make_pair(cur_node->right_node_, global_transform));
+      }
+      Eigen::Matrix<T, 4, 4> rest_mat = cur_node->local_mat_.template cast<T>();
+      if (!bone_transforms.empty() && cur_node->name_ != "Root_M") {
+        rest_mat.block(0, 3, 3, 1) << bone_transforms[cur_node->idx_].cast<T>();
+      }
+      global_transform = global_transform * rest_mat;
+      if (cur_node->left_node_ != nullptr && !params.empty()) {
+        Eigen::Matrix<T, 4, 4> local_transform =
+            Eigen::Matrix<T, 4, 4>::Identity();
+        Eigen::Matrix<T, 3, 3> cur_rotation =
+            Eigen::Matrix<T, 3, 3>::Identity();
+        if (use_xyz) {
+          cur_rotation = Eigen::AngleAxis<T>(params[3 * cur_node->idx_ + 2],
+                                             Eigen::Matrix<T, 3, 1>::UnitZ()) *
+                         Eigen::AngleAxis<T>(params[3 * cur_node->idx_ + 1],
+                                             Eigen::Matrix<T, 3, 1>::UnitY()) *
+                         Eigen::AngleAxis<T>(params[3 * cur_node->idx_ + 0],
+                                             Eigen::Matrix<T, 3, 1>::UnitX());
+        } else {
+          cur_rotation = Eigen::AngleAxis<T>(params[3 * cur_node->idx_ + 0],
+                                             Eigen::Matrix<T, 3, 1>::UnitX()) *
+                         Eigen::AngleAxis<T>(params[3 * cur_node->idx_ + 1],
+                                             Eigen::Matrix<T, 3, 1>::UnitY()) *
+                         Eigen::AngleAxis<T>(params[3 * cur_node->idx_ + 2],
+                                             Eigen::Matrix<T, 3, 1>::UnitZ());
+        }
+        local_transform.block(0, 0, 3, 3) = cur_rotation;
+        global_transform = global_transform * local_transform;
+      }
+      result_pose.row(cur_node->idx_) << global_transform(0, 3),
+          global_transform(1, 3), global_transform(2, 3);
+      if (cur_node->left_node_ != nullptr) {
+        queue.push_back(std::make_pair(cur_node->left_node_, global_transform));
+      }
+    }
+  }
+
+  void AddFakedBoneNode(
+      const std::vector<std::string>& bone_names,
+      const std::vector<std::string>& parent_names,
+      const STLVectorOfEigenTypes<Eigen::Matrix4f>& rest_mats);
+
+  // only support entire skeleton
+  void GetLocalTransform(std::vector<float>& transfrom_array);
+
+  // calculate the rotation under global(Identity) coordinate.
+  void SetBoneTranslation(const std::string& bone_name,
+                          const glm::vec3& translation,
+                          std::vector<float>& transform_array);
+  void ConvertLocalRotationToGlobalRotation(
+      const STLVectorOfEigenTypes<Eigen::Matrix4f>& local_rotation_mats,
+      STLVectorOfEigenTypes<Eigen::Matrix4f>& global_rotation_mats);
+
+  std::vector<float> CalculateLocalTransform(
+      const STLVectorOfEigenTypes<Eigen::Matrix4f>& rotation_mats,
+      const glm::vec3& root_trans);
+
+  void ExtractModelMatrix(std::vector<float>& transform_matrix,
+                          std::vector<float>& model_matrix, bool is_stable);
+
+  std::vector<SkeletonNode::Ptr> bone_array_;
+  std::map<std::string, int> bone_name2index_map;
+
+ private:
+  explicit Skeleton(
+      const std::vector<SkeletonNode::Ptr>& bone_array);
+
+  SkeletonNode::Ptr root_;
+  bool graph_inited = false;
+  void BuildGraph();
+};
 
 class Model {
 public:
