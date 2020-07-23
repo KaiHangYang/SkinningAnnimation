@@ -5,6 +5,7 @@
 #include <vector>
 #include <map>
 #include <deque>
+#include <chrono>
 #include "common/logging.h"
 
 #define MY_PI 3.1415926f
@@ -23,3 +24,8 @@ std::shared_ptr<T> STLMakeSharedOfEigenTypes(const Args&... args) {
   return std::allocate_shared<T, Eigen::aligned_allocator<T>, const Args&...>(
       Eigen::aligned_allocator<T>(), args...);
 }
+
+
+double GetTimeStampSecond();
+
+double GetMod(double s, double a);

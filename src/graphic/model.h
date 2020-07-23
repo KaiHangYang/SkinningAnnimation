@@ -13,9 +13,11 @@
 
 
 // Helper function.
+size_t GLTFComponentByteSize(int type);
+int GLTFTypeElmSize(int type);
+GLenum GLTFRenderMode(int mode);
 glm::mat4 GetNodeTransform(const tinygltf::Node& node);
-void QTSToMatrix(std::vector<float>::const_iterator qts_start,
-  std::vector<float>::const_iterator qts_end,
+void QTSToMatrix(const std::vector<float>& qts,
   Eigen::Matrix4f& matrix);
 void MatrixToQTS(const Eigen::Matrix4f& _matrix,
   std::vector<float>& qts);
@@ -65,7 +67,11 @@ class SceneTree {
   void UpdateGlobalPose(bool with_inverse = false);
   // Before get, you may need UpdateGlobalPose first if the local pose has been changed.
   void GetSkinningPoseData(const std::vector<int>& joints_used, std::vector<float>& skinning_pose_data);
-  void SetAnimationFrame(const tinygltf::Model& model, int time_stamp);
+  void SetAnimationFrame(const tinygltf::Model& model, double time_stamp);
+  void ResetAnimationTimer() {
+    anim_time_ = 0;
+    anim_timestamp_ = -1;
+  }
 
   void SetLocalPose(const std::vector<float>& transform_array);
 
@@ -80,10 +86,24 @@ class SceneTree {
       const std::vector<std::string>& ordered_names,
       const STLVectorOfEigenTypes<Eigen::Matrix4f>& transforms) const;
 
-  void SetBoneTranslation(const glm::vec3& translation,
-                          const std::string& bone_names);
+  void SetNodeTranslation(const glm::vec3& translation,
+                          const std::string& node_names);
 
-  int GetBoneNum() const { return node_array_.size(); }
+  int GetNodeNum() const { return node_array_.size(); }
+
+  SceneTreeNode::Ptr GetNode(const std::string& node_name) {
+    if (node_name2index_map_.find(node_name) != node_name2index_map_.end()) {
+      return GetNode(node_name2index_map_[node_name]);
+    }
+    else {
+      LOG(WARNING) << "Node: " << node_name << " doesn't exist in the node array";
+      return nullptr;
+    }
+  }
+  SceneTreeNode::Ptr GetNode(int node_idx) {
+    return node_array_[node_idx];
+  }
+
 
   glm::vec3 GetRootTrans() const;
 
@@ -158,16 +178,18 @@ class SceneTree {
       const STLVectorOfEigenTypes<Eigen::Matrix4f>& local_rotation_mats,
       STLVectorOfEigenTypes<Eigen::Matrix4f>& global_rotation_mats);
 
-  std::vector<SceneTreeNode::Ptr> node_array_;
-  std::map<std::string, int> bone_name2index_map;
-
  private:
   explicit SceneTree(
       const std::vector<SceneTreeNode::Ptr>& bone_array);
 
+  std::vector<SceneTreeNode::Ptr> node_array_;
+  std::map<std::string, int> node_name2index_map_;
   SceneTreeNode::Ptr root_;
-  bool graph_inited = false;
+  bool graph_inited_ = false;
   void BuildGraph();
+
+  double anim_time_ = -1;
+  double anim_timestamp_ = 0;
 };
 
 class Model {
@@ -191,7 +213,6 @@ private:
   void RenderNode(int node_idx, const glm::mat4& parent_transform);
   void RenderMesh(int mesh_idx);
   GLuint ProcessBufferView(const tinygltf::Accessor& accessor, GLenum buffer_type);
-  size_t GLTFComponentByteSize(int type);
   tinygltf::Model model_;
 
   bool is_skinning_ = false;

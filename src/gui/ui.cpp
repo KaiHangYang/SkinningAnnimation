@@ -75,7 +75,7 @@ bool App::Init(int wnd_width, int wnd_height, const std::string &title) {
   }
 
   InitPlane();
-  avatar_model_.Init("../resource/BrainStem/BrainStem.gltf");
+  avatar_model_.Init("../resource/SimpleSkinning/SimpleSkinning.gltf");
   avatar_model_matrix_ = glm::mat4(1.0f);
 
   inited_ = true;
