@@ -11,6 +11,10 @@
 #include "common/utility.h"
 #include "graphic/shader.h"
 
+
+// Helper function.
+glm::mat4 GetNodeTransform(const tinygltf::Node& node);
+
 // Define the skeleton 
 class SkeletonNode {
  public:
@@ -19,20 +23,23 @@ class SkeletonNode {
 
   SkeletonNode() = delete;
   SkeletonNode(int index, int parent_idx, const std::string& name,
-                const Eigen::Matrix4f& rest_mat,
-                const Eigen::Matrix4f& global_mat)
+                const Eigen::Matrix4f& local_mat,
+                const Eigen::Matrix4f& global_mat,
+                const Eigen::Matrix4f& inv_bind_mat)
       : idx_(index),
         parent_idx_(parent_idx),
         name_(name),
-        local_mat_(rest_mat),
-        global_mat_(global_mat) {}
+        local_mat_(local_mat),
+        global_mat_(global_mat),
+        inv_bind_mat_(inv_bind_mat){}
   ~SkeletonNode() = default;
 
-  const int idx_;
-  const int parent_idx_;
-  const std::string name_;
+  int idx_;
+  int parent_idx_;
+  std::string name_;
   Eigen::Matrix4f local_mat_;
   Eigen::Matrix4f global_mat_;
+  Eigen::Matrix4f inv_bind_mat_;
 
   // left node for first child.
   Ptr left_node_ = nullptr;
@@ -46,9 +53,13 @@ class Skeleton {
   Skeleton() = default;
   ~Skeleton() = default;
 
+  void Init(const tinygltf::Model& model);
+
   Skeleton Copy() const;
 
-  void UpdateGlobalPose();
+  void UpdateGlobalPose(bool with_inverse = false);
+  // Before get, you may need UpdateGlobalPose first if the local pose has been changed.
+  void GetSkinningPoseData(const std::vector<int>& joints_used, std::vector<float>& skinning_pose_data);
   void SetLocalPose(const std::vector<float>& transform_array);
 
   void GetGlobalKeypoints(const std::vector<std::string>& keypoint_names,
@@ -140,13 +151,6 @@ class Skeleton {
       const STLVectorOfEigenTypes<Eigen::Matrix4f>& local_rotation_mats,
       STLVectorOfEigenTypes<Eigen::Matrix4f>& global_rotation_mats);
 
-  std::vector<float> CalculateLocalTransform(
-      const STLVectorOfEigenTypes<Eigen::Matrix4f>& rotation_mats,
-      const glm::vec3& root_trans);
-
-  void ExtractModelMatrix(std::vector<float>& transform_matrix,
-                          std::vector<float>& model_matrix, bool is_stable);
-
   std::vector<SkeletonNode::Ptr> bone_array_;
   std::map<std::string, int> bone_name2index_map;
 
@@ -163,7 +167,7 @@ class Model {
 public:
   enum DrawType {DRAW_ARRAY = 0, DRAW_ELEMENT = 1};
   Model() = default;
-  void Init(const std::string &model_path, const std::shared_ptr<Shader> &shader_tex, const std::shared_ptr<Shader>&shader_notex);
+  void Init(const std::string &model_path);
   void Render(const glm::mat4& view_matrix, const glm::mat4& proj_matrix, const glm::mat4& model_matrix);
   ~Model(){};
 
@@ -172,9 +176,6 @@ private:
     DrawType draw_type = DRAW_ARRAY;
     int count = 0;
     GLuint vao = 0;
-    GLuint position_vbo = 0;
-    GLuint texcoord_vbo = 0;
-    GLuint normal_vbo = 0;
     GLuint indices_vbo = 0;
     GLuint texture_id = 0;
     glm::vec4 color = glm::vec4(0.5, 0.5, 0.5, 1.0);
@@ -186,8 +187,10 @@ private:
   size_t GLTFComponentByteSize(int type);
   tinygltf::Model model_;
 
-  std::shared_ptr<Shader> shader_tex_;
-  std::shared_ptr<Shader> shader_notex_;
+  bool is_skinning_ = false;
+  Skeleton skinning_skeleton_;
+
+  Shader shader_;
 
   std::map<int, std::vector<RenderParams>> mesh_render_params_;
   std::map<int, GLuint> gpu_buffer_views_;

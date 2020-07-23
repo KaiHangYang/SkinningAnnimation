@@ -22,6 +22,7 @@ public:
 
   void Use();
 
+  void SetMat4Array(const std::string &val_name, const std::vector<float> &val, int n);
   void Set(const std::string &val_name, const glm::mat3 &val);
   void Set(const std::string &val_name, const glm::vec3 &val);
   void Set(const std::string &val_name, const glm::mat4 &val);

@@ -9,12 +9,7 @@
 #include "common/logging.h"
 #include "graphic/model.h"
 
-void Model::Init(const std::string &model_path,
-                 const std::shared_ptr<Shader> &shader_tex,
-                 const std::shared_ptr<Shader> &shader_notex) {
-  shader_tex_ = shader_tex;
-  shader_notex_ = shader_notex;
-
+void Model::Init(const std::string &model_path) {
   // Load models.
   tinygltf::TinyGLTF gltf_ctx;
   std::string err;
@@ -30,6 +25,27 @@ void Model::Init(const std::string &model_path,
   }
   if (!ret) {
     LOG(FATAL) << "Load gltf failed!";
+  }
+
+  if (model_.textures.size() > 0) {
+    if (model_.skins.size() > 0) {
+      is_skinning_ = true;
+      shader_.InitFromFile("../shader/avatar_tex_skin_vs.glsl", "../shader/avatar_tex_skin_fs.glsl");
+    }
+    else {
+      is_skinning_ = false;
+      shader_.InitFromFile("../shader/avatar_tex_vs.glsl", "../shader/avatar_tex_fs.glsl");
+    }
+  }
+  else {
+    if (model_.skins.size() > 0) {
+      is_skinning_ = true;
+      shader_.InitFromFile("../shader/avatar_notex_skin_vs.glsl", "../shader/avatar_notex_skin_fs.glsl");
+    }
+    else {
+      is_skinning_ = false;
+      shader_.InitFromFile("../shader/avatar_notex_vs.glsl", "../shader/avatar_notex_fs.glsl");
+    }
   }
 
   mesh_render_params_.clear();
@@ -74,32 +90,37 @@ void Model::Init(const std::string &model_path,
             accessor.ByteStride(model_.bufferViews[accessor.bufferView]);
         CHECK(byte_stride != -1) << "byte_strid equal -1";
         if (a_iter->first == "POSITION") {
-          cur_render_params.position_vbo = cur_vbo;
           cur_render_params.count = accessor.count;
-          glBindBuffer(GL_ARRAY_BUFFER, cur_render_params.position_vbo);
+          glBindBuffer(GL_ARRAY_BUFFER, cur_vbo);
           glVertexAttribPointer(0, size, accessor.componentType,
                                 accessor.normalized ? GL_TRUE : GL_FALSE,
                                 byte_stride, (GLvoid *)(accessor.byteOffset));
           glEnableVertexAttribArray(0);
           glBindBuffer(GL_ARRAY_BUFFER, 0);
         } else if (a_iter->first == "TEXCOORD_0") {
-          cur_render_params.texcoord_vbo = cur_vbo;
-          glBindBuffer(GL_ARRAY_BUFFER, cur_render_params.texcoord_vbo);
+          glBindBuffer(GL_ARRAY_BUFFER, cur_vbo);
           glVertexAttribPointer(1, size, accessor.componentType,
                                 accessor.normalized ? GL_TRUE : GL_FALSE,
                                 byte_stride, (GLvoid *)(accessor.byteOffset));
           glEnableVertexAttribArray(1);
           glBindBuffer(GL_ARRAY_BUFFER, 0);
         } else if (a_iter->first == "NORMAL") {
-          cur_render_params.normal_vbo = cur_vbo;
-          glBindBuffer(GL_ARRAY_BUFFER, cur_render_params.normal_vbo);
+          glBindBuffer(GL_ARRAY_BUFFER, cur_vbo);
           glVertexAttribPointer(2, size, accessor.componentType,
                                 accessor.normalized ? GL_TRUE : GL_FALSE,
                                 byte_stride, (GLvoid *)(accessor.byteOffset));
           glEnableVertexAttribArray(2);
           glBindBuffer(GL_ARRAY_BUFFER, 0);
         } else if (a_iter->first == "JOINTS_0") {
+          glBindBuffer(GL_ARRAY_BUFFER, cur_vbo);
+          glVertexAttribPointer(3, size, accessor.componentType, accessor.normalized ? GL_TRUE : GL_FALSE, byte_stride, (GLvoid*)(accessor.byteOffset));
+          glEnableVertexAttribArray(3);
+          glBindBuffer(GL_ARRAY_BUFFER, 0);
         } else if (a_iter->first == "WEIGHTS_0") {
+          glBindBuffer(GL_ARRAY_BUFFER, cur_vbo);
+          glVertexAttribPointer(4, size, accessor.componentType, accessor.normalized ? GL_TRUE : GL_FALSE, byte_stride, (GLvoid*)(accessor.byteOffset));
+          glEnableVertexAttribArray(4);
+          glBindBuffer(GL_ARRAY_BUFFER, 0);
         }
       }
 
@@ -167,19 +188,35 @@ void Model::Init(const std::string &model_path,
       glBindVertexArray(0);
     }
   }
+
+  if (is_skinning_) {
+    // build up skeleton
+    skinning_skeleton_.Init(model_);
+  }
 }
 
 void Model::Render(const glm::mat4 &view_matrix, const glm::mat4 &proj_matrix,
                    const glm::mat4 &model_matrix) {
-  shader_tex_->Use();
-  shader_tex_->Set("model_matrix", model_matrix);
-  shader_tex_->Set("view_matrix", view_matrix);
-  shader_tex_->Set("proj_matrix", proj_matrix);
+  shader_.Use();
+  // Set model matrix when render mesh
+  shader_.Set("view_matrix", view_matrix);
+  shader_.Set("proj_matrix", proj_matrix);
 
-  shader_notex_->Use();
-  shader_notex_->Set("model_matrix", model_matrix);
-  shader_notex_->Set("view_matrix", view_matrix);
-  shader_notex_->Set("proj_matrix", proj_matrix);
+  Eigen::Matrix4f rotation_mat = Eigen::Matrix4f::Identity();
+  Eigen::Matrix3f tmp_rot = Eigen::AngleAxisf(MY_PI / 30, Eigen::Vector3f::UnitX()).toRotationMatrix();
+  rotation_mat.block(0, 0, 3, 3) = tmp_rot;
+
+  //auto& cur_skeleton = skinning_skeleton_.Copy();
+  auto& cur_skeleton = skinning_skeleton_;
+
+  int bone_idx = cur_skeleton.bone_name2index_map["b_Spine02_03"];
+  cur_skeleton.bone_array_[bone_idx]->local_mat_ *= rotation_mat;
+
+  std::vector<float> skinning_pose_data;
+  cur_skeleton.UpdateGlobalPose();
+  cur_skeleton.GetSkinningPoseData(model_.skins[0].joints, skinning_pose_data);
+
+  shader_.SetMat4Array("skinning_transforms", skinning_pose_data, model_.skins[0].joints.size());
 
   GLboolean last_enable_depth_test = glIsEnabled(GL_DEPTH_TEST);
   GLboolean last_enable_multisample = glIsEnabled(GL_MULTISAMPLE);
@@ -190,7 +227,7 @@ void Model::Render(const glm::mat4 &view_matrix, const glm::mat4 &proj_matrix,
   int scene_to_display = model_.defaultScene > -1 ? model_.defaultScene : 0;
   const tinygltf::Scene &scene = model_.scenes[scene_to_display];
   for (size_t n_idx = 0; n_idx < scene.nodes.size(); ++n_idx) {
-    RenderNode(model_.nodes[scene.nodes[n_idx]], glm::mat4(1.f));
+    RenderNode(model_.nodes[scene.nodes[n_idx]], model_matrix);
   }
 
   if (!last_enable_depth_test)
@@ -219,13 +256,12 @@ size_t Model::GLTFComponentByteSize(int type) {
   }
 };
 
-void Model::RenderNode(const tinygltf::Node &node,
-                       const glm::mat4 &parent_transform) {
-  glm::mat4 cur_transform(1.f);
+glm::mat4 GetNodeTransform(const tinygltf::Node& node) {
+  glm::mat4 node_transform(1.f);
   if (node.matrix.size() == 16) {
-    std::copy(node.matrix.begin(), node.matrix.end(), &cur_transform[0][0]);
-    cur_transform = cur_transform;
-  } else {
+    std::copy(node.matrix.begin(), node.matrix.end(), &node_transform[0][0]);
+  }
+  else {
     glm::vec3 scale_vec(1.0, 1.0, 1.0);
     glm::quat rot_vec(1.0, 0.0, 0.0, 0.0);
     glm::vec3 trans_vec(0.0, 0.0, 0.0);
@@ -233,21 +269,28 @@ void Model::RenderNode(const tinygltf::Node &node,
       scale_vec = glm::vec3(node.scale[0], node.scale[1], node.scale[2]);
     }
     if (!node.rotation.empty()) {
-      rot_vec = glm::quat(node.rotation[3], node.rotation[0], node.rotation[1],
-                          node.rotation[2]);
+      rot_vec = glm::quat(node.rotation[3], node.rotation[0], node.rotation[1], node.rotation[2]);
     }
     if (!node.translation.empty()) {
-      trans_vec = glm::vec3(node.translation[0], node.translation[1],
-                            node.translation[2]);
+      trans_vec = glm::vec3(node.translation[0], node.translation[1], node.translation[2]);
     }
+
     glm::mat4 cur_scale = glm::scale(glm::mat4(1.f), scale_vec);
     glm::mat4 cur_rot = glm::toMat4(rot_vec);
     glm::mat4 cur_trans = glm::translate(glm::mat4(1.f), trans_vec);
-    cur_transform = cur_trans * cur_rot * cur_scale;
+    node_transform = cur_trans * cur_rot * cur_scale;
   }
-  cur_transform = parent_transform * cur_transform;
 
+  return node_transform;
+}
+
+void Model::RenderNode(const tinygltf::Node &node,
+                       const glm::mat4 &parent_transform) {
+  glm::mat4 cur_transform = GetNodeTransform(node);
+  cur_transform = parent_transform * cur_transform;
   if (node.mesh > -1) {
+    // Set model matrix.
+    shader_.Set("model_matrix", cur_transform);
     RenderMesh(node.mesh);
   }
   for (size_t c_idx = 0; c_idx < node.children.size(); ++c_idx) {
@@ -281,18 +324,19 @@ void Model::RenderMesh(int mesh_idx) {
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
     glEnableVertexAttribArray(2);
+    if (is_skinning_) {
+      glEnableVertexAttribArray(3);
+      glEnableVertexAttribArray(4);
+    }
 
     if (render_params.texture_id) {
       // Enable texture sampler.
-
       glActiveTexture(GL_TEXTURE0);
       glBindTexture(GL_TEXTURE_2D, render_params.texture_id);
-      shader_tex_->Use();
-      shader_tex_->Set("diffuse_texture", 0);
+      shader_.Set("diffuse_texture", 0);
 
     } else {
-      shader_notex_->Use();
-      shader_notex_->Set("vertex_color", render_params.color);
+      shader_.Set("vertex_color", render_params.color);
     }
 
     if (render_params.draw_type == DRAW_ARRAY) {
@@ -311,6 +355,10 @@ void Model::RenderMesh(int mesh_idx) {
     glDisableVertexAttribArray(0);
     glDisableVertexAttribArray(1);
     glDisableVertexAttribArray(2);
+    if (is_skinning_) {
+      glDisableVertexAttribArray(3);
+      glDisableVertexAttribArray(4);
+    }
     glBindVertexArray(0);
   }
 }
@@ -386,8 +434,27 @@ GLuint Model::ProcessBufferView(const tinygltf::Accessor &accessor,
                  GL_STATIC_DRAW);
   }
   glBindBuffer(buffer_type, 0);
-
   return vbo;
+}
+
+void Skeleton::Init(const tinygltf::Model& model) {
+  bone_array_.clear();
+  bone_name2index_map.clear();
+  for (size_t n_idx = 0; n_idx < model.nodes.size(); ++n_idx) {
+    const auto& node = model.nodes[n_idx];
+    glm::mat4 node_transform = GetNodeTransform(node);
+    bone_array_.push_back(STLMakeSharedOfEigenTypes<SkeletonNode>(n_idx, -1, node.name, Eigen::Matrix4f(&node_transform[0][0]), Eigen::Matrix4f::Identity(), Eigen::Matrix4f::Identity()));
+    bone_name2index_map[node.name] = n_idx;
+  }
+  for (size_t n_idx = 0; n_idx < model.nodes.size(); ++n_idx) {
+    const auto& node = model.nodes[n_idx];
+    for (const auto& child_idx : node.children) {
+      bone_array_[child_idx]->parent_idx_ = n_idx;
+    }
+  }
+  BuildGraph();
+  // only update inv_bind_mat_ when initing.
+  UpdateGlobalPose(true);
 }
 
 Skeleton::Skeleton(const std::vector<SkeletonNode::Ptr> &input_bone_array)
@@ -395,7 +462,8 @@ Skeleton::Skeleton(const std::vector<SkeletonNode::Ptr> &input_bone_array)
   for (auto bone_ptr : bone_array_) {
     bone_name2index_map[bone_ptr->name_] = bone_ptr->idx_;
   }
-  this->BuildGraph();
+  BuildGraph();
+  UpdateGlobalPose();
 }
 
 Skeleton Skeleton::Copy() const {
@@ -403,7 +471,7 @@ Skeleton Skeleton::Copy() const {
   for (const auto &cur_bone_ptr : bone_array_) {
     new_bone_array.push_back(STLMakeSharedOfEigenTypes<SkeletonNode>(
         cur_bone_ptr->idx_, cur_bone_ptr->parent_idx_, cur_bone_ptr->name_,
-        cur_bone_ptr->local_mat_, cur_bone_ptr->global_mat_));
+        cur_bone_ptr->local_mat_, cur_bone_ptr->global_mat_, cur_bone_ptr->inv_bind_mat_));
   }
   return Skeleton(new_bone_array);
 }
@@ -417,7 +485,7 @@ glm::vec3 Skeleton::GetRootTrans() const {
 void Skeleton::BuildGraph() {
   CHECK(!this->graph_inited) << "graph is already initialized.";
   root_ = STLMakeSharedOfEigenTypes<SkeletonNode>(
-      -1, -1, "", Eigen::Matrix4f::Identity(), Eigen::Matrix4f::Identity());
+      -1, -1, "", Eigen::Matrix4f::Identity(), Eigen::Matrix4f::Identity(), Eigen::Matrix4f::Identity());
   for (auto i = 0; i < this->bone_array_.size(); i++) {
     auto &cur_bone_ptr = this->bone_array_[i];
     SkeletonNode::Ptr parent_ptr;
@@ -436,7 +504,7 @@ void Skeleton::BuildGraph() {
   this->graph_inited = true;
 }
 
-void Skeleton::UpdateGlobalPose() {
+void Skeleton::UpdateGlobalPose(bool with_inverse) {
   // Use depth first search to update global matrix.
   STLVectorOfEigenTypes<std::pair<SkeletonNode::Ptr, Eigen::Matrix4f>> s;
   s.push_back(std::make_pair(root_->left_node_, Eigen::Matrix4f::Identity()));
@@ -450,12 +518,24 @@ void Skeleton::UpdateGlobalPose() {
     if (cur_node->right_node_ != nullptr) {
       s.push_back(std::make_pair(cur_node->right_node_, global_transfrom));
     }
-    Eigen::Matrix4f rest_mat = cur_node->local_mat_;
-    global_transfrom = global_transfrom * rest_mat;
+    Eigen::Matrix4f local_mat = cur_node->local_mat_;
+    global_transfrom = global_transfrom * local_mat;
     cur_node->global_mat_ = global_transfrom;
+    if (with_inverse) {
+      cur_node->inv_bind_mat_ = cur_node->global_mat_.inverse();
+    }
     if (cur_node->left_node_ != nullptr) {
       s.push_back(std::make_pair(cur_node->left_node_, global_transfrom));
     }
+  }
+}
+
+void Skeleton::GetSkinningPoseData(const std::vector<int>& joints_used, std::vector<float>& skinning_pose_data) {
+  skinning_pose_data.resize(joints_used.size() * 16, 0);
+  for (int i = 0; i < joints_used.size(); ++i) {
+    int b_idx = joints_used[i];
+    Eigen::Matrix4f pose_mat = bone_array_[b_idx]->global_mat_ * bone_array_[b_idx]->inv_bind_mat_;
+    std::copy(pose_mat.data(), pose_mat.data() + 16, &skinning_pose_data[16 * i]);
   }
 }
 
@@ -485,8 +565,7 @@ void Skeleton::GetGlobalKeypoints(
   }
 }
 
-Skeleton
-Skeleton::Split(const std::vector<std::string> &skeleton_ordered_name) const {
+Skeleton Skeleton::Split(const std::vector<std::string> &skeleton_ordered_name) const {
   std::vector<bool> skeleton_valid(this->bone_array_.size(), false);
   std::map<int, int> oldIdx2newIdx_map;
   std::vector<SkeletonNode::Ptr> new_bone_array(skeleton_ordered_name.size());
@@ -524,7 +603,7 @@ Skeleton::Split(const std::vector<std::string> &skeleton_ordered_name) const {
 
     new_bone_array[new_idx] = STLMakeSharedOfEigenTypes<SkeletonNode>(
         new_idx, new_parent_idx, this->bone_array_[i]->name_, local_mat,
-        this->bone_array_[i]->global_mat_);
+        this->bone_array_[i]->global_mat_, this->bone_array_[i]->inv_bind_mat_);
   }
   Skeleton result(new_bone_array);
   result.UpdateGlobalPose();
@@ -543,7 +622,7 @@ Skeleton Skeleton::UpdateTransform(
     new_bone_array[i] = STLMakeSharedOfEigenTypes<SkeletonNode>(
         this->bone_array_[i]->idx_, this->bone_array_[i]->parent_idx_,
         this->bone_array_[i]->name_, this->bone_array_[i]->local_mat_,
-        this->bone_array_[i]->global_mat_);
+        this->bone_array_[i]->global_mat_, this->bone_array_[i]->inv_bind_mat_);
   }
   for (auto i = 0; i < ordered_names.size(); i++) {
     auto bone_name = ordered_names[i];
@@ -580,9 +659,10 @@ void Skeleton::AddFakedBoneNode(
     this->bone_name2index_map[bone_names[i]] = cur_offset;
     SkeletonNode::Ptr parent_ptr = this->bone_array_[iter->second];
 
+    Eigen::Matrix4f global_mat = parent_ptr->global_mat_ * rest_mats[i];
     SkeletonNode::Ptr new_bone_ptr = STLMakeSharedOfEigenTypes<SkeletonNode>(
         cur_offset++, iter->second, bone_names[i], rest_mats[i],
-        parent_ptr->global_mat_ * rest_mats[i]);
+        global_mat, global_mat.inverse());
 
     if (parent_ptr->left_node_ == nullptr) {
       parent_ptr->left_node_ = new_bone_ptr;
@@ -643,56 +723,4 @@ void Skeleton::ConvertLocalRotationToGlobalRotation(
     global_rotation_mats[b_idx] =
         global_mat * local_rotation_mats[b_idx] * global_mat.inverse();
   }
-}
-
-std::vector<float> Skeleton::CalculateLocalTransform(
-    const STLVectorOfEigenTypes<Eigen::Matrix4f> &rotation_mats,
-    const glm::vec3 &root_trans) {
-  std::vector<float> transform_array(16 * this->bone_array_.size(), 0);
-  for (int t_idx = 0; t_idx < this->bone_array_.size(); ++t_idx) {
-    transform_array[16 * t_idx + 4 * 0 + 0] = 1.f;
-    transform_array[16 * t_idx + 4 * 1 + 1] = 1.f;
-    transform_array[16 * t_idx + 4 * 2 + 2] = 1.f;
-    transform_array[16 * t_idx + 4 * 3 + 3] = 1.f;
-  }
-
-  int root_idx = this->bone_name2index_map["Root_M"];
-  Eigen::Matrix4f root_mat = this->bone_array_[root_idx]->local_mat_;
-  root_mat.block(0, 3, 3, 1) << root_trans.x, root_trans.y, root_trans.z;
-  for (auto i = 0; i < this->bone_array_.size(); i++) {
-    auto bone_ptr = this->bone_array_[i];
-    Eigen::Matrix4f local_mat = bone_ptr->local_mat_;
-    if (bone_ptr->name_ == "Root_M") {
-      root_mat = root_mat * rotation_mats[i];
-      local_mat = root_mat;
-    } else {
-      local_mat = local_mat * rotation_mats[i];
-    }
-    std::copy(local_mat.data(), local_mat.data() + local_mat.size(),
-              transform_array.begin() + local_mat.size() * i);
-  }
-  return transform_array;
-}
-
-void Skeleton::ExtractModelMatrix(std::vector<float> &transform_array,
-                                  std::vector<float> &model_matrix,
-                                  bool is_stable) {
-  int root_idx = this->bone_name2index_map["Root_M"];
-  Eigen::Matrix4f root_transform(&transform_array[16 * root_idx]);
-
-  Eigen::Matrix4f mat = Eigen::Matrix4f::Identity();
-  if (!model_matrix.empty()) {
-    mat = Eigen::Matrix4f(model_matrix.data());
-  }
-
-  if (!is_stable) {
-    mat = root_transform * bone_array_[root_idx]->local_mat_.inverse();
-  }
-
-  root_transform = mat.inverse() * root_transform;
-
-  model_matrix = std::vector<float>(mat.data(), mat.data() + mat.size());
-  std::copy(root_transform.data(),
-            root_transform.data() + root_transform.size(),
-            &transform_array[16 * root_idx]);
 }

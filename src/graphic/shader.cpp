@@ -163,6 +163,17 @@ void Shader::Use() {
     LOG(WARNING) << "Shader Error: Shader hasn't been inited!";
 }
 
+void Shader::SetMat4Array(const std::string &val_name, const std::vector<float> &val, int n) {
+  if (inited_) {
+    CHECK(val.size() == n * 16) << "val size doesn't match 16 * n";
+    GLint location = glGetUniformLocation(program_id_, val_name.c_str());
+    glUniformMatrix4fv(location, n, GL_FALSE, val.data());
+  }
+  else {
+    LOG(WARNING) << "Shader Error: Shader hasn't been inited!";
+  }
+}
+
 void Shader::Set(const std::string &val_name, const glm::mat3 &val) {
   if (inited_) {
     GLint location = glGetUniformLocation(program_id_, val_name.c_str());
