@@ -14,15 +14,20 @@
 
 // Helper function.
 glm::mat4 GetNodeTransform(const tinygltf::Node& node);
+void QTSToMatrix(std::vector<float>::const_iterator qts_start,
+  std::vector<float>::const_iterator qts_end,
+  Eigen::Matrix4f& matrix);
+void MatrixToQTS(const Eigen::Matrix4f& _matrix,
+  std::vector<float>& qts);
 
 // Define the skeleton 
-class SkeletonNode {
+class SceneTreeNode {
  public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-  using Ptr = std::shared_ptr<SkeletonNode>;
+  using Ptr = std::shared_ptr<SceneTreeNode>;
 
-  SkeletonNode() = delete;
-  SkeletonNode(int index, int parent_idx, const std::string& name,
+  SceneTreeNode() = delete;
+  SceneTreeNode(int index, int parent_idx, const std::string& name,
                 const Eigen::Matrix4f& local_mat,
                 const Eigen::Matrix4f& global_mat,
                 const Eigen::Matrix4f& inv_bind_mat)
@@ -32,7 +37,7 @@ class SkeletonNode {
         local_mat_(local_mat),
         global_mat_(global_mat),
         inv_bind_mat_(inv_bind_mat){}
-  ~SkeletonNode() = default;
+  ~SceneTreeNode() = default;
 
   int idx_;
   int parent_idx_;
@@ -47,36 +52,38 @@ class SkeletonNode {
   Ptr right_node_ = nullptr;
 };
 
-class Skeleton {
+class SceneTree {
  public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-  Skeleton() = default;
-  ~Skeleton() = default;
+  SceneTree() = default;
+  ~SceneTree() = default;
 
   void Init(const tinygltf::Model& model);
 
-  Skeleton Copy() const;
+  SceneTree Copy() const;
 
   void UpdateGlobalPose(bool with_inverse = false);
   // Before get, you may need UpdateGlobalPose first if the local pose has been changed.
   void GetSkinningPoseData(const std::vector<int>& joints_used, std::vector<float>& skinning_pose_data);
+  void SetAnimationFrame(const tinygltf::Model& model, int time_stamp);
+
   void SetLocalPose(const std::vector<float>& transform_array);
 
   void GetGlobalKeypoints(const std::vector<std::string>& keypoint_names,
                           std::vector<glm::vec3>& keypoints);
 
   // split current skeleton into smaller one
-  Skeleton Split(
+  SceneTree Split(
       const std::vector<std::string>& skeleton_ordered_name) const;
 
-  Skeleton UpdateTransform(
+  SceneTree UpdateTransform(
       const std::vector<std::string>& ordered_names,
       const STLVectorOfEigenTypes<Eigen::Matrix4f>& transforms) const;
 
   void SetBoneTranslation(const glm::vec3& translation,
                           const std::string& bone_names);
 
-  int GetBoneNum() const { return bone_array_.size(); }
+  int GetBoneNum() const { return node_array_.size(); }
 
   glm::vec3 GetRootTrans() const;
 
@@ -86,12 +93,12 @@ class Skeleton {
                    const std::vector<T>& params = {},
                    const std::vector<Eigen::Vector3d>& bone_transforms = {},
                    bool use_xyz = true) const {
-    STLVectorOfEigenTypes<std::pair<SkeletonNode::Ptr, Eigen::Matrix<T, 4, 4>>>
+    STLVectorOfEigenTypes<std::pair<SceneTreeNode::Ptr, Eigen::Matrix<T, 4, 4>>>
         queue;
     queue.push_back(
         std::make_pair(root_->left_node_, Eigen::Matrix<T, 4, 4>::Identity()));
     while (!queue.empty()) {
-      SkeletonNode::Ptr cur_node = queue.back().first;
+      SceneTreeNode::Ptr cur_node = queue.back().first;
       Eigen::Matrix<T, 4, 4> global_transform = queue.back().second;
       queue.pop_back();
 
@@ -151,14 +158,14 @@ class Skeleton {
       const STLVectorOfEigenTypes<Eigen::Matrix4f>& local_rotation_mats,
       STLVectorOfEigenTypes<Eigen::Matrix4f>& global_rotation_mats);
 
-  std::vector<SkeletonNode::Ptr> bone_array_;
+  std::vector<SceneTreeNode::Ptr> node_array_;
   std::map<std::string, int> bone_name2index_map;
 
  private:
-  explicit Skeleton(
-      const std::vector<SkeletonNode::Ptr>& bone_array);
+  explicit SceneTree(
+      const std::vector<SceneTreeNode::Ptr>& bone_array);
 
-  SkeletonNode::Ptr root_;
+  SceneTreeNode::Ptr root_;
   bool graph_inited = false;
   void BuildGraph();
 };
@@ -181,14 +188,14 @@ private:
     glm::vec4 color = glm::vec4(0.5, 0.5, 0.5, 1.0);
   };
 
-  void RenderNode(const tinygltf::Node& node, const glm::mat4& parent_transform);
+  void RenderNode(int node_idx, const glm::mat4& parent_transform);
   void RenderMesh(int mesh_idx);
   GLuint ProcessBufferView(const tinygltf::Accessor& accessor, GLenum buffer_type);
   size_t GLTFComponentByteSize(int type);
   tinygltf::Model model_;
 
   bool is_skinning_ = false;
-  Skeleton skinning_skeleton_;
+  SceneTree scene_tree_;
 
   Shader shader_;
 
