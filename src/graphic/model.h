@@ -216,6 +216,8 @@ private:
   tinygltf::Model model_;
 
   bool is_skinning_ = false;
+  std::vector<int> skinning_joints_;
+  STLVectorOfEigenTypes<Eigen::Matrix4f> skinning_invbindmat_;
   SceneTree scene_tree_;
 
   Shader shader_;

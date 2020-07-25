@@ -184,13 +184,29 @@ void Model::Init(const std::string &model_path) {
       glBindVertexArray(0);
     }
   }
-  // build up skeleton
+
+  if (is_skinning_) {
+    const auto& skin = model_.skins[0];
+    skinning_joints_ = skin.joints;
+    skinning_invbindmat_.resize(skinning_joints_.size(), Eigen::Matrix4f::Identity());
+
+    const auto& accessor = model_.accessors[skin.inverseBindMatrices];
+    const auto& buffer_view = model_.bufferViews[accessor.bufferView];
+    const auto& buffer = model_.buffers[buffer_view.buffer];
+
+    const float* buffer_ptr = reinterpret_cast<const float*>(buffer.data.data() + accessor.byteOffset);
+    CHECK(skin.joints.size() == accessor.count) << "skin joints doesn't match matrix count.";
+
+    for (int j_idx = 0; j_idx < skinning_joints_.size(); ++j_idx) {
+      skinning_invbindmat_[j_idx] = Eigen::Matrix4f(buffer_ptr + 16 * j_idx);
+    }
+  }
+  // build up scene_tree
   scene_tree_.Init(model_);
 }
 
 void Model::Render(const glm::mat4 &view_matrix, const glm::mat4 &proj_matrix,
                    const glm::mat4 &model_matrix) {
-
   shader_.Use();
   // Set model matrix when render mesh
   shader_.Set("view_matrix", view_matrix);
