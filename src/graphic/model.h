@@ -63,7 +63,7 @@ public:
       const std::vector<int> &skinning_joints,
       const STLVectorOfEigenTypes<Eigen::Matrix4f> &skinning_invbindmat,
       std::vector<float> &skinning_pose_data);
-  void SetAnimationFrame(const tinygltf::Model &model, double time_stamp);
+  void SetAnimationFrame(const tinygltf::Model &model, int anim_idx, double time_stamp);
   void ResetAnimationTimer() {
     anim_time_ = 0;
     anim_timestamp_ = -1;
@@ -202,7 +202,7 @@ private:
     glm::vec4 color = glm::vec4(0.5, 0.5, 0.5, 1.0);
   };
 
-  void RenderNode(int node_idx, const glm::mat4 &parent_transform);
+  void RenderNode(int node_idx, const glm::mat4 &parent_transform, const glm::mat4& model_matrix);
   void RenderMesh(int mesh_idx);
   GLuint ProcessBufferView(const tinygltf::Accessor &accessor,
                            GLenum buffer_type);

@@ -186,19 +186,30 @@ void Model::Init(const std::string &model_path) {
   }
 
   if (is_skinning_) {
-    const auto& skin = model_.skins[0];
+    const auto &skin = model_.skins[0];
     skinning_joints_ = skin.joints;
-    skinning_invbindmat_.resize(skinning_joints_.size(), Eigen::Matrix4f::Identity());
+    skinning_invbindmat_.resize(skinning_joints_.size(),
+                                Eigen::Matrix4f::Identity());
 
-    const auto& accessor = model_.accessors[skin.inverseBindMatrices];
-    const auto& buffer_view = model_.bufferViews[accessor.bufferView];
-    const auto& buffer = model_.buffers[buffer_view.buffer];
+    const auto &accessor = model_.accessors[skin.inverseBindMatrices];
+    const auto &buffer_view = model_.bufferViews[accessor.bufferView];
+    const auto &buffer = model_.buffers[buffer_view.buffer];
 
-    const float* buffer_ptr = reinterpret_cast<const float*>(buffer.data.data() + accessor.byteOffset);
-    CHECK(skin.joints.size() == accessor.count) << "skin joints doesn't match matrix count.";
+    const float *buffer_ptr = reinterpret_cast<const float *>(
+        buffer.data.data() + buffer_view.byteOffset + accessor.byteOffset);
+    CHECK(skin.joints.size() == accessor.count)
+        << "skin joints doesn't match matrix count.";
+
+    int data_stride = 16;
+    if (buffer_view.byteStride != 0) {
+      data_stride = buffer_view.byteStride / 4;
+    }
 
     for (int j_idx = 0; j_idx < skinning_joints_.size(); ++j_idx) {
-      skinning_invbindmat_[j_idx] = Eigen::Matrix4f(buffer_ptr + 16 * j_idx);
+      skinning_invbindmat_[j_idx] =
+          Eigen::Matrix4f(buffer_ptr + data_stride * j_idx);
+      // LOG(INFO) << "index: " << j_idx;
+      // std::cout << skinning_invbindmat_[j_idx] << std::endl;
     }
   }
   // build up scene_tree
@@ -212,12 +223,16 @@ void Model::Render(const glm::mat4 &view_matrix, const glm::mat4 &proj_matrix,
   shader_.Set("view_matrix", view_matrix);
   shader_.Set("proj_matrix", proj_matrix);
 
-  // Suppose only one skin exists.
-  scene_tree_.SetAnimationFrame(model_, GetTimeStampSecond());
+  // Set the animation index manually.
+  if (!model_.animations.empty()) {
+    scene_tree_.SetAnimationFrame(model_, 0, GetTimeStampSecond());
+  }
+
   scene_tree_.UpdateGlobalPose();
   if (is_skinning_) {
     std::vector<float> skinning_pose_data;
-    scene_tree_.GetSkinningPoseData(skinning_joints_, skinning_invbindmat_, skinning_pose_data);
+    scene_tree_.GetSkinningPoseData(skinning_joints_, skinning_invbindmat_,
+                                    skinning_pose_data);
     shader_.SetMat4Array("skinning_transforms", skinning_pose_data,
                          model_.skins[0].joints.size());
   }
@@ -231,7 +246,7 @@ void Model::Render(const glm::mat4 &view_matrix, const glm::mat4 &proj_matrix,
   int scene_to_display = model_.defaultScene > -1 ? model_.defaultScene : 0;
   const tinygltf::Scene &scene = model_.scenes[scene_to_display];
   for (size_t n_idx = 0; n_idx < scene.nodes.size(); ++n_idx) {
-    RenderNode(scene.nodes[n_idx], model_matrix);
+    RenderNode(scene.nodes[n_idx], glm::mat4(1.f), model_matrix);
   }
 
   if (!last_enable_depth_test)
@@ -273,8 +288,8 @@ void QTSToMatrix(const std::vector<float> &qts, Eigen::Matrix4f &matrix) {
   Eigen::Matrix3f rotation = Eigen::Quaternion<float>(&qts[0]).matrix();
   Eigen::Matrix4f scale = Eigen::Matrix4f::Identity();
   scale(0, 0) = qts[7];
-  scale(1, 1) = qts[7];
-  scale(2, 2) = qts[7];
+  scale(1, 1) = qts[8];
+  scale(2, 2) = qts[9];
 
   matrix = Eigen::Matrix4f::Identity();
   matrix.block(0, 0, 3, 3) = rotation;
@@ -286,7 +301,7 @@ void QTSToMatrix(const std::vector<float> &qts, Eigen::Matrix4f &matrix) {
 void MatrixToQTS(const Eigen::Matrix4f &matrix, std::vector<float> &qts) {
   Eigen::Matrix4f mat = matrix;
 
-  qts = std::vector<float>(8, 0);
+  qts = std::vector<float>(10, 0);
   Eigen::Matrix<float, 1, 3> x_vec, y_vec, z_vec;
   x_vec << mat(0, 0), mat(0, 1), mat(0, 2);
   y_vec << mat(1, 0), mat(1, 1), mat(1, 2);
@@ -312,10 +327,13 @@ void MatrixToQTS(const Eigen::Matrix4f &matrix, std::vector<float> &qts) {
   qts[4] = mat(0, 3);
   qts[5] = mat(1, 3);
   qts[6] = mat(2, 3);
-  qts[7] = (scale_x + scale_y + scale_z) * 0.3333333333f;
+  qts[7] = scale_x;
+  qts[8] = scale_y;
+  qts[9] = scale_z;
 }
 
-void Model::RenderNode(int node_idx, const glm::mat4 &parent_transform) {
+void Model::RenderNode(int node_idx, const glm::mat4 &parent_transform,
+                       const glm::mat4 &model_matrix) {
   const auto &node = model_.nodes[node_idx];
   const Eigen::Matrix4f &node_local = scene_tree_.GetNode(node_idx)->local_mat_;
   glm::mat4 cur_transform(1.f);
@@ -324,11 +342,18 @@ void Model::RenderNode(int node_idx, const glm::mat4 &parent_transform) {
   cur_transform = parent_transform * cur_transform;
   if (node.mesh > -1) {
     // Set model matrix.
-    shader_.Set("model_matrix", cur_transform);
+    if (is_skinning_) {
+      // If use skinning, the scene_tree has setted the node transforms in the
+      // GetSkinningPoseData. So I only need to set model_matrix.
+      shader_.Set("model_matrix", model_matrix);
+    } else {
+      shader_.Set("model_matrix", model_matrix * cur_transform);
+    }
+
     RenderMesh(node.mesh);
   }
   for (size_t c_idx = 0; c_idx < node.children.size(); ++c_idx) {
-    RenderNode(node.children[c_idx], cur_transform);
+    RenderNode(node.children[c_idx], cur_transform, model_matrix);
   }
 }
 
@@ -549,9 +574,10 @@ void SceneTree::UpdateGlobalPose(bool with_inverse) {
   }
 }
 
-void SceneTree::GetSkinningPoseData(const std::vector<int> &skinning_joints,
-                                    const STLVectorOfEigenTypes<Eigen::Matrix4f>& skinning_invbindmat, 
-                                    std::vector<float> &skinning_pose_data) {
+void SceneTree::GetSkinningPoseData(
+    const std::vector<int> &skinning_joints,
+    const STLVectorOfEigenTypes<Eigen::Matrix4f> &skinning_invbindmat,
+    std::vector<float> &skinning_pose_data) {
   skinning_pose_data.resize(skinning_joints.size() * 16, 0);
   for (int i = 0; i < skinning_joints.size(); ++i) {
     int b_idx = skinning_joints[i];
@@ -562,84 +588,93 @@ void SceneTree::GetSkinningPoseData(const std::vector<int> &skinning_joints,
   }
 }
 
-void SceneTree::SetAnimationFrame(const tinygltf::Model &model,
+void SceneTree::SetAnimationFrame(const tinygltf::Model &model, int anim_idx,
                                   double time_stamp) {
+  CHECK(anim_idx >= 0 && anim_idx < model.animations.size())
+      << "anim_idx is beyond model.animations array.";
   if (anim_time_ < 0) {
     anim_timestamp_ = time_stamp;
   }
   anim_time_ = time_stamp - anim_timestamp_;
 
   // no animation information.
-  for (int anim_idx = 0; anim_idx < model.animations.size(); ++anim_idx) {
-    const auto &animation_samplers = model.animations[anim_idx].samplers;
-    const auto &animation_channels = model.animations[anim_idx].channels;
+  const auto &animation_samplers = model.animations[anim_idx].samplers;
+  const auto &animation_channels = model.animations[anim_idx].channels;
 
-    for (int chan_idx = 0; chan_idx < animation_channels.size(); ++chan_idx) {
-      const auto &cur_anim_channel = animation_channels[chan_idx];
-      const auto &cur_anim_sampler =
-          animation_samplers[cur_anim_channel.sampler];
+  for (int chan_idx = 0; chan_idx < animation_channels.size(); ++chan_idx) {
+    const auto &cur_anim_channel = animation_channels[chan_idx];
+    const auto &cur_anim_sampler = animation_samplers[cur_anim_channel.sampler];
 
-      // Currently only support rotation animation.
-      // Cause I only used this program for rigid body.
-      int node_idx = cur_anim_channel.target_node;
-      Eigen::Matrix4f cur_local = node_array_[node_idx]->local_mat_;
-      std::vector<float> qts_array;
-      MatrixToQTS(cur_local, qts_array);
+    // Currently only support rotation animation.
+    // Cause I only used this program for rigid body.
+    int node_idx = cur_anim_channel.target_node;
+    Eigen::Matrix4f cur_local = node_array_[node_idx]->local_mat_;
+    std::vector<float> qts_array;
+    MatrixToQTS(cur_local, qts_array);
 
-      const auto &time_accessor = model.accessors[cur_anim_sampler.input];
-      const auto &value_accessor = model.accessors[cur_anim_sampler.output];
+    const auto &time_accessor = model.accessors[cur_anim_sampler.input];
+    const auto &value_accessor = model.accessors[cur_anim_sampler.output];
 
-      const auto &time_buffer_view =
-          model.bufferViews[time_accessor.bufferView];
-      const auto &time_buffer = model.buffers[time_buffer_view.buffer];
+    const auto &time_buffer_view = model.bufferViews[time_accessor.bufferView];
+    const auto &time_buffer = model.buffers[time_buffer_view.buffer];
 
-      const float *time_ptr = reinterpret_cast<const float *>(
-          time_buffer.data.data() + time_accessor.byteOffset);
-      int time_elm_size = GLTFTypeElmSize(time_accessor.type);
-      std::vector<float> time_arr(
-          time_ptr,
-          time_accessor.count * time_elm_size + time_ptr);
+    const float *time_ptr = reinterpret_cast<const float *>(
+        time_buffer.data.data() + time_buffer_view.byteOffset +
+        time_accessor.byteOffset);
+    int time_elm_size = GLTFTypeElmSize(time_accessor.type);
+    std::vector<float> time_arr(time_ptr,
+                                time_accessor.count * time_elm_size + time_ptr);
 
-      double max_time = *time_arr.rbegin();
+    double max_time = *time_arr.rbegin();
 
-      const auto &value_buffer_view =
-          model.bufferViews[value_accessor.bufferView];
-      const auto &value_buffer = model.buffers[value_buffer_view.buffer];
-      const float *value_ptr = reinterpret_cast<const float *>(
-          value_buffer.data.data() + value_accessor.byteOffset);
-      int value_elm_size = GLTFTypeElmSize(value_accessor.type);
-      std::vector<float> value_arr(value_ptr, value_ptr + value_accessor.count *
-                                                              value_elm_size);
-      double cur_mod_time = GetMod(anim_time_, max_time);
-      auto time_iter = std::lower_bound(time_arr.begin(), time_arr.end(), cur_mod_time);
-      int index = time_iter - time_arr.begin() - 1;
-      if (index < 0) index = 0;
+    const auto &value_buffer_view =
+        model.bufferViews[value_accessor.bufferView];
+    const auto &value_buffer = model.buffers[value_buffer_view.buffer];
+    const float *value_ptr = reinterpret_cast<const float *>(
+        value_buffer.data.data() + value_buffer_view.byteOffset +
+        value_accessor.byteOffset);
+    int value_elm_size = GLTFTypeElmSize(value_accessor.type);
+    std::vector<float> value_arr(value_ptr, value_ptr + value_accessor.count *
+                                                            value_elm_size);
+    double cur_mod_time = GetMod(anim_time_, max_time);
+    auto time_iter =
+        std::lower_bound(time_arr.begin(), time_arr.end(), cur_mod_time);
+    int index = time_iter - time_arr.begin() - 1;
+    if (index < 0)
+      index = 0;
 
-      float weight = (cur_mod_time - time_arr[index]) / (time_arr[index + 1] - time_arr[index]);
+    float weight = (cur_mod_time - time_arr[index]) /
+                   (time_arr[index + 1] - time_arr[index]);
 
-      // Interpolate the animation.
-      if (cur_anim_channel.target_path == "rotation") {
-        // find the left 
-        glm::quat quat_left(value_arr[4 * index + 3], value_arr[4 * index + 0], value_arr[4 * index + 1], value_arr[4 * index + 2]);
-        glm::quat quat_right(value_arr[4 * (index + 1) + 3], value_arr[4 * (index + 1) + 0], value_arr[4 * (index + 1) + 1], value_arr[4 * (index + 1) + 2]);
-        glm::quat quat_slerp = glm::shortMix(quat_left, quat_right, weight);
-        qts_array[0] = quat_slerp.x;
-        qts_array[1] = quat_slerp.y;
-        qts_array[2] = quat_slerp.z;
-        qts_array[3] = quat_slerp.w;
-      } else if (cur_anim_channel.target_path == "translation") {
-        qts_array[4] = (1 - weight) * value_arr[3 * index + 0] + weight * value_arr[3 * (index + 1) + 0];
-        qts_array[5] = (1 - weight) * value_arr[3 * index + 1] + weight * value_arr[3 * (index + 1) + 1];
-        qts_array[6] = (1 - weight) * value_arr[3 * index + 2] + weight * value_arr[3 * (index + 1) + 2];
-      } else if (cur_anim_channel.target_path == "scale") {
-        //float s0 = (1 - weight) * value_arr[3 * index + 0] + weight * value_arr[3 * (index + 1) + 0];
-        //float s1 = (1 - weight) * value_arr[3 * index + 1] + weight * value_arr[3 * (index + 1) + 1];
-        //float s2 = (1 - weight) * value_arr[3 * index + 2] + weight * value_arr[3 * (index + 1) + 2];
-        //qts_array[7] = (s0 + s1 + s2) / 3.0;
-        //LOG(INFO) << qts_array[7];
-      }
-      QTSToMatrix(qts_array, node_array_[node_idx]->local_mat_);
+    // Interpolate the animation.
+    if (cur_anim_channel.target_path == "rotation") {
+      // find the left
+      glm::quat quat_left(value_arr[4 * index + 3], value_arr[4 * index + 0],
+                          value_arr[4 * index + 1], value_arr[4 * index + 2]);
+      glm::quat quat_right(
+          value_arr[4 * (index + 1) + 3], value_arr[4 * (index + 1) + 0],
+          value_arr[4 * (index + 1) + 1], value_arr[4 * (index + 1) + 2]);
+      glm::quat quat_slerp = glm::shortMix(quat_left, quat_right, weight);
+      qts_array[0] = quat_slerp.x;
+      qts_array[1] = quat_slerp.y;
+      qts_array[2] = quat_slerp.z;
+      qts_array[3] = quat_slerp.w;
+    } else if (cur_anim_channel.target_path == "translation") {
+      qts_array[4] = (1 - weight) * value_arr[3 * index + 0] +
+                     weight * value_arr[3 * (index + 1) + 0];
+      qts_array[5] = (1 - weight) * value_arr[3 * index + 1] +
+                     weight * value_arr[3 * (index + 1) + 1];
+      qts_array[6] = (1 - weight) * value_arr[3 * index + 2] +
+                     weight * value_arr[3 * (index + 1) + 2];
+    } else if (cur_anim_channel.target_path == "scale") {
+      qts_array[7] = (1 - weight) * value_arr[3 * index + 0] +
+                     weight * value_arr[3 * (index + 1) + 0];
+      qts_array[8] = (1 - weight) * value_arr[3 * index + 1] +
+                     weight * value_arr[3 * (index + 1) + 1];
+      qts_array[9] = (1 - weight) * value_arr[3 * index + 2] +
+                     weight * value_arr[3 * (index + 1) + 2];
     }
+    QTSToMatrix(qts_array, node_array_[node_idx]->local_mat_);
   }
 }
 
