@@ -221,8 +221,10 @@ private:
   void RenderMesh(int mesh_idx);
   GLuint ProcessBufferView(const tinygltf::Accessor &accessor,
                            GLenum buffer_type);
+  void ProcessBufferView(const tinygltf::Accessor& accessor);
+  
+  void SetPrimitiveNormals(const tinygltf::Primitive& primitive, RenderParams& render_params);
   tinygltf::Model model_;
-
 
   // About Animation.
   int animation_index_ = -1;
@@ -238,4 +240,5 @@ private:
 
   std::map<int, std::vector<RenderParams>> mesh_render_params_;
   std::map<int, GLuint> gpu_buffer_views_;
+  std::map<int, std::vector<uint8_t>> cpu_buffer_views_;
 };

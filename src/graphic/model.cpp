@@ -11,6 +11,41 @@
 #include "common/logging.h"
 #include "graphic/model.h"
 
+
+void Model::SetPrimitiveNormals(const tinygltf::Primitive& primitive, RenderParams& render_params) {
+  auto iter = primitive.attributes.begin();
+  const auto iter_end = primitive.attributes.end();
+  
+  int position_idx = -1;
+  for (; iter != iter_end; iter++) {
+    if (iter->first == "POSITION") {
+      position_idx = iter->second;
+      break;
+    }
+  }
+  CHECK(position_idx != -1) << "primitive's POSITION attrib is not exist!";
+  const auto& position_accessor = model_.accessors[position_idx];
+  const auto& position_buffer_view = model_.bufferViews[position_accessor.bufferView];
+
+  const std::vector<uint8_t>& position_data = cpu_buffer_views_[position_accessor.bufferView];
+  CHECK(!position_data.empty()) << "primitive's position cpu data hasn't been inited!";
+
+  if (render_params.draw_type == DRAW_ELEMENT) {
+    int indices_idx = primitive.indices;
+    const auto& indices_accessor = model_.accessors[indices_idx];
+    const auto& indices_buffer_view = model_.bufferViews[indices_accessor.bufferView];
+
+    const std::vector<uint8_t>& indices_data = cpu_buffer_views_[indices_accessor.bufferView];
+    CHECK(!indices_data.empty()) << "primitive's indices cpu data hasn't been inited!";
+    std::map<int, std::vector<glm::vec3>> indices_normal_map;
+
+
+  }
+  else {
+   
+  }
+}
+
 void Model::Init(const std::string &model_path) {
   // Load models.
   tinygltf::TinyGLTF gltf_ctx;
@@ -52,7 +87,6 @@ void Model::Init(const std::string &model_path) {
   }
 
   mesh_render_params_.clear();
-
   for (size_t m_idx = 0; m_idx < model_.meshes.size(); ++m_idx) {
     const auto &mesh = model_.meshes[m_idx];
     mesh_render_params_[m_idx] = std::vector<RenderParams>();
@@ -64,18 +98,22 @@ void Model::Init(const std::string &model_path) {
 
       auto a_iter = primitive.attributes.begin();
       auto a_iter_end = primitive.attributes.end();
+
+      bool has_normal = false;
+      for (; a_iter != a_iter_end; ++a_iter) {
+        if (a_iter->first == "NORMAL") {
+          has_normal = true;
+        }
+      }
+
+      a_iter = primitive.attributes.begin();
       for (; a_iter != a_iter_end; ++a_iter) {
         const auto &accessor = model_.accessors[a_iter->second];
         GLuint cur_vbo = 0;
         if (a_iter->first == "POSITION" || a_iter->first == "NORMAL" ||
             a_iter->first == "TEXCOORD_0" || a_iter->first == "JOINTS_0" ||
             a_iter->first == "WEIGHTS_0") {
-          if (gpu_buffer_views_.find(accessor.bufferView) ==
-              gpu_buffer_views_.end()) {
             cur_vbo = ProcessBufferView(accessor, GL_ARRAY_BUFFER);
-          } else {
-            cur_vbo = gpu_buffer_views_[accessor.bufferView];
-          }
         }
         int size = GLTFTypeElmSize(accessor.type);
         int byte_stride =
@@ -89,6 +127,11 @@ void Model::Init(const std::string &model_path) {
                                 byte_stride, (GLvoid *)(accessor.byteOffset));
           glEnableVertexAttribArray(0);
           glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+          if (!has_normal) {
+            // if don't have normal
+            ProcessBufferView(accessor); // process cpu buffer.
+          }
         } else if (a_iter->first == "TEXCOORD_0") {
           glBindBuffer(GL_ARRAY_BUFFER, cur_vbo);
           glVertexAttribPointer(1, size, accessor.componentType,
@@ -125,9 +168,14 @@ void Model::Init(const std::string &model_path) {
         cur_render_params.indices_vbo = ProcessBufferView(
             model_.accessors[primitive.indices], GL_ELEMENT_ARRAY_BUFFER);
         cur_render_params.count = model_.accessors[primitive.indices].count;
+        if (!has_normal) {
+          ProcessBufferView(model_.accessors[primitive.indices]);
+        }
       } else {
         cur_render_params.draw_type = DRAW_ARRAY;
       }
+
+      // Calculated and setted normal if needed
 
       // Load textures.
       if (primitive.material >= 0) {
@@ -417,8 +465,75 @@ void Model::RenderMesh(int mesh_idx) {
   }
 }
 
+void Model::ProcessBufferView(const tinygltf::Accessor& accessor) {
+  if (cpu_buffer_views_.find(accessor.bufferView) != cpu_buffer_views_.end()) {
+    return;
+  }
+  const auto &buffer_view = model_.bufferViews[accessor.bufferView];
+  const auto &buffer = model_.buffers[buffer_view.buffer];
+  std::vector<uint8_t>& data = cpu_buffer_views_[accessor.bufferView];
+  data.resize(buffer_view.byteLength, 0);
+  std::copy(buffer.data.data() + buffer_view.byteOffset,
+    buffer.data.data() + buffer_view.byteOffset +
+    buffer_view.byteLength,
+    data.data());
+  if (accessor.sparse.isSparse){
+    const size_t size_of_object_in_buffer =
+      GLTFComponentByteSize(accessor.componentType);
+    const size_t size_of_sparse_indices =
+      GLTFComponentByteSize(accessor.sparse.indices.componentType);
+    const auto &indices_buffer_view =
+      model_.bufferViews[accessor.sparse.indices.bufferView];
+    const auto &indices_buffer = model_.buffers[indices_buffer_view.buffer];
+    const auto &values_buffer_view =
+      model_.bufferViews[accessor.sparse.values.bufferView];
+    const auto &values_buffer = model_.buffers[values_buffer_view.buffer];
+
+    for (size_t sparse_idx = 0; sparse_idx < accessor.sparse.count;
+      ++sparse_idx) {
+      int index = 0;
+      switch (accessor.sparse.indices.componentType) {
+      case TINYGLTF_COMPONENT_TYPE_BYTE:
+      case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
+        index = (int)*(unsigned char *)(indices_buffer.data.data() +
+          indices_buffer_view.byteOffset +
+          accessor.sparse.indices.byteOffset +
+          (sparse_idx * size_of_sparse_indices));
+        break;
+      case TINYGLTF_COMPONENT_TYPE_SHORT:
+      case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
+        index = (int)*(unsigned short *)(indices_buffer.data.data() +
+          indices_buffer_view.byteOffset +
+          accessor.sparse.indices.byteOffset +
+          (sparse_idx * size_of_sparse_indices));
+        break;
+      case TINYGLTF_COMPONENT_TYPE_INT:
+      case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:
+        index = (int)*(unsigned int *)(indices_buffer.data.data() +
+          indices_buffer_view.byteOffset +
+          accessor.sparse.indices.byteOffset +
+          (sparse_idx * size_of_sparse_indices));
+        break;
+      }
+      const uint8_t *read_from =
+        values_buffer.data.data() +
+        (values_buffer_view.byteOffset + accessor.sparse.values.byteOffset) +
+        (sparse_idx * (size_of_object_in_buffer * accessor.type));
+
+      uint8_t *write_to = data.data() +
+        index * (size_of_object_in_buffer * accessor.type);
+      memcpy(write_to, read_from, size_of_object_in_buffer * accessor.type);
+    }
+  }
+}
+
 GLuint Model::ProcessBufferView(const tinygltf::Accessor &accessor,
                                 GLenum buffer_type) {
+  if (gpu_buffer_views_.find(accessor.bufferView) !=
+    gpu_buffer_views_.end()) {
+    return gpu_buffer_views_[accessor.bufferView];
+  }
+
   const auto &buffer_view = model_.bufferViews[accessor.bufferView];
   const auto &buffer = model_.buffers[buffer_view.buffer];
   GLuint vbo = 0;
