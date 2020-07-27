@@ -181,6 +181,7 @@ private:
 
   double anim_time_ = -1;
   double anim_timestamp_ = 0;
+  int last_anim_index_ = -1;
 };
 
 class Model {
@@ -190,6 +191,20 @@ public:
   void Init(const std::string &model_path);
   void Render(const glm::mat4 &view_matrix, const glm::mat4 &proj_matrix,
               const glm::mat4 &model_matrix);
+
+  int* GetAnimationIndexPtr() {
+    return &animation_index_;
+  }
+  int GetAnimationIndex() const {
+    return animation_index_;
+  }
+  int GetAnimationSize() const {
+    return animation_size_;
+  }
+  const std::string& GetAnimationNames() const {
+    return animation_names_;
+  }
+
   ~Model(){};
 
 private:
@@ -207,6 +222,12 @@ private:
   GLuint ProcessBufferView(const tinygltf::Accessor &accessor,
                            GLenum buffer_type);
   tinygltf::Model model_;
+
+
+  // About Animation.
+  int animation_index_ = -1;
+  int animation_size_ = 0;
+  std::string animation_names_;
 
   bool is_skinning_ = false;
   std::vector<int> skinning_joints_;

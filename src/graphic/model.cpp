@@ -214,6 +214,15 @@ void Model::Init(const std::string &model_path) {
   }
   // build up scene_tree
   scene_tree_.Init(model_);
+
+  if (!model_.animations.empty()) {
+    animation_index_ = 0;
+    animation_size_ = model_.animations.size();
+    animation_names_.clear();
+    for (int a_idx = 0; a_idx < animation_size_; ++a_idx) {
+      animation_names_ += "Animation " + std::to_string(a_idx) + '\0';
+    }
+  }
 }
 
 void Model::Render(const glm::mat4 &view_matrix, const glm::mat4 &proj_matrix,
@@ -224,8 +233,8 @@ void Model::Render(const glm::mat4 &view_matrix, const glm::mat4 &proj_matrix,
   shader_.Set("proj_matrix", proj_matrix);
 
   // Set the animation index manually.
-  if (!model_.animations.empty()) {
-    scene_tree_.SetAnimationFrame(model_, 0, GetTimeStampSecond());
+  if (animation_size_ > 0 && animation_index_ >= 0 && animation_index_ < animation_size_) {
+    scene_tree_.SetAnimationFrame(model_, animation_index_, GetTimeStampSecond());
   }
 
   scene_tree_.UpdateGlobalPose();
@@ -592,7 +601,8 @@ void SceneTree::SetAnimationFrame(const tinygltf::Model &model, int anim_idx,
                                   double time_stamp) {
   CHECK(anim_idx >= 0 && anim_idx < model.animations.size())
       << "anim_idx is beyond model.animations array.";
-  if (anim_time_ < 0) {
+  if (last_anim_index_ != anim_idx) {
+    last_anim_index_ = anim_idx;
     anim_timestamp_ = time_stamp;
   }
   anim_time_ = time_stamp - anim_timestamp_;

@@ -305,7 +305,10 @@ void App::RenderScene() {
   }
 
   ImGui::Text("X: %f Y: %f", io.MousePos.x, io.MousePos.y);
-  glm::mat4 grid_model_matrix(1.f);
+
+  ImGui::Separator();
+  ImGui::Text("Animation");
+  ImGui::Combo("Animation: ", avatar_model_.GetAnimationIndexPtr(), avatar_model_.GetAnimationNames().c_str());
 
   RenderPlane(view_matrix_, proj_matrix_, model_matrix_);
   avatar_model_.Render(view_matrix_, proj_matrix_,
