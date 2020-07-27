@@ -217,7 +217,7 @@ void Model::Render(const glm::mat4 &view_matrix, const glm::mat4 &proj_matrix,
   scene_tree_.UpdateGlobalPose();
   if (is_skinning_) {
     std::vector<float> skinning_pose_data;
-    scene_tree_.GetSkinningPoseData(model_.skins[0].joints, skinning_pose_data);
+    scene_tree_.GetSkinningPoseData(skinning_joints_, skinning_invbindmat_, skinning_pose_data);
     shader_.SetMat4Array("skinning_transforms", skinning_pose_data,
                          model_.skins[0].joints.size());
   }
@@ -465,7 +465,7 @@ void SceneTree::Init(const tinygltf::Model &model) {
     glm::mat4 node_transform = GetNodeTransform(node);
     node_array_.push_back(STLMakeSharedOfEigenTypes<SceneTreeNode>(
         n_idx, -1, node.name, Eigen::Matrix4f(&node_transform[0][0]),
-        Eigen::Matrix4f::Identity(), Eigen::Matrix4f::Identity()));
+        Eigen::Matrix4f::Identity()));
     node_name2index_map_[node.name] = n_idx;
   }
   for (size_t n_idx = 0; n_idx < model.nodes.size(); ++n_idx) {
@@ -493,8 +493,7 @@ SceneTree SceneTree::Copy() const {
   for (const auto &cur_bone_ptr : node_array_) {
     new_bone_array.push_back(STLMakeSharedOfEigenTypes<SceneTreeNode>(
         cur_bone_ptr->idx_, cur_bone_ptr->parent_idx_, cur_bone_ptr->name_,
-        cur_bone_ptr->local_mat_, cur_bone_ptr->global_mat_,
-        cur_bone_ptr->inv_bind_mat_));
+        cur_bone_ptr->local_mat_, cur_bone_ptr->global_mat_));
   }
   return SceneTree(new_bone_array);
 }
@@ -508,8 +507,7 @@ glm::vec3 SceneTree::GetRootTrans() const {
 void SceneTree::BuildGraph() {
   CHECK(!this->graph_inited_) << "graph is already initialized.";
   root_ = STLMakeSharedOfEigenTypes<SceneTreeNode>(
-      -1, -1, "", Eigen::Matrix4f::Identity(), Eigen::Matrix4f::Identity(),
-      Eigen::Matrix4f::Identity());
+      -1, -1, "", Eigen::Matrix4f::Identity(), Eigen::Matrix4f::Identity());
   for (auto i = 0; i < this->node_array_.size(); i++) {
     auto &cur_bone_ptr = this->node_array_[i];
     SceneTreeNode::Ptr parent_ptr;
@@ -545,22 +543,20 @@ void SceneTree::UpdateGlobalPose(bool with_inverse) {
     Eigen::Matrix4f local_mat = cur_node->local_mat_;
     global_transfrom = global_transfrom * local_mat;
     cur_node->global_mat_ = global_transfrom;
-    if (with_inverse) {
-      cur_node->inv_bind_mat_ = cur_node->global_mat_.inverse();
-    }
     if (cur_node->left_node_ != nullptr) {
       s.push_back(std::make_pair(cur_node->left_node_, global_transfrom));
     }
   }
 }
 
-void SceneTree::GetSkinningPoseData(const std::vector<int> &joints_used,
+void SceneTree::GetSkinningPoseData(const std::vector<int> &skinning_joints,
+                                    const STLVectorOfEigenTypes<Eigen::Matrix4f>& skinning_invbindmat, 
                                     std::vector<float> &skinning_pose_data) {
-  skinning_pose_data.resize(joints_used.size() * 16, 0);
-  for (int i = 0; i < joints_used.size(); ++i) {
-    int b_idx = joints_used[i];
+  skinning_pose_data.resize(skinning_joints.size() * 16, 0);
+  for (int i = 0; i < skinning_joints.size(); ++i) {
+    int b_idx = skinning_joints[i];
     Eigen::Matrix4f pose_mat =
-        node_array_[b_idx]->global_mat_ * node_array_[b_idx]->inv_bind_mat_;
+        node_array_[b_idx]->global_mat_ * skinning_invbindmat[i];
     std::copy(pose_mat.data(), pose_mat.data() + 16,
               &skinning_pose_data[16 * i]);
   }
@@ -713,7 +709,7 @@ SceneTree SceneTree::Split(
 
     new_bone_array[new_idx] = STLMakeSharedOfEigenTypes<SceneTreeNode>(
         new_idx, new_parent_idx, this->node_array_[i]->name_, local_mat,
-        this->node_array_[i]->global_mat_, this->node_array_[i]->inv_bind_mat_);
+        this->node_array_[i]->global_mat_);
   }
   SceneTree result(new_bone_array);
   result.UpdateGlobalPose();
@@ -732,7 +728,7 @@ SceneTree SceneTree::UpdateTransform(
     new_bone_array[i] = STLMakeSharedOfEigenTypes<SceneTreeNode>(
         this->node_array_[i]->idx_, this->node_array_[i]->parent_idx_,
         this->node_array_[i]->name_, this->node_array_[i]->local_mat_,
-        this->node_array_[i]->global_mat_, this->node_array_[i]->inv_bind_mat_);
+        this->node_array_[i]->global_mat_);
   }
   for (auto i = 0; i < ordered_names.size(); i++) {
     auto bone_name = ordered_names[i];
@@ -771,8 +767,7 @@ void SceneTree::AddFakedBoneNode(
 
     Eigen::Matrix4f global_mat = parent_ptr->global_mat_ * rest_mats[i];
     SceneTreeNode::Ptr new_bone_ptr = STLMakeSharedOfEigenTypes<SceneTreeNode>(
-        cur_offset++, iter->second, bone_names[i], rest_mats[i], global_mat,
-        global_mat.inverse());
+        cur_offset++, iter->second, bone_names[i], rest_mats[i], global_mat);
 
     if (parent_ptr->left_node_ == nullptr) {
       parent_ptr->left_node_ = new_bone_ptr;
