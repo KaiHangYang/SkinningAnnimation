@@ -1,7 +1,7 @@
 #include <glm/common.hpp>
+#include <glm/gtx/string_cast.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <memory>
-
 
 #include "common/logging.h"
 #include "gui/ui.h"
@@ -66,7 +66,7 @@ bool App::Init(int wnd_width, int wnd_height, const std::string &title) {
   {
     // Set view_matrix_
     glm::vec3 eye{
-        cosf(camera_angle_.y) * cosf(camera_angle_.x) * camera_distance_,
+        cosf(camera_angle_.y) * cosf(camera_angle_.x)* camera_distance_,
         sinf(camera_angle_.x) * camera_distance_,
         sinf(camera_angle_.y) * cosf(camera_angle_.x) * camera_distance_};
     glm::vec3 at{0.f, 0.f, 0.f};
@@ -291,24 +291,27 @@ void App::RenderScene() {
   } else {
     ImGui::SliderFloat("Ortho width", &view_width_, 1, 20);
   }
-  bool view_dirty =
-      ImGui::SliderFloat("Distance", &camera_distance_, 3.f, 200.f);
-  if (view_dirty) {
-    // Set view_matrix_
-    glm::vec3 eye{
-        cosf(camera_angle_.y) * cosf(camera_angle_.x) * camera_distance_,
-        sinf(camera_angle_.x) * camera_distance_,
-        sinf(camera_angle_.y) * cosf(camera_angle_.x) * camera_distance_};
-    glm::vec3 at{0.f, 0.f, 0.f};
-    glm::vec3 up{0.f, 1.f, 0.f};
-    view_matrix_ = glm::lookAt(eye, at, up);
-  }
 
   ImGui::Text("X: %f Y: %f", io.MousePos.x, io.MousePos.y);
 
+  if (io.MouseWheel) {
+    glm::mat4 inv_view_matrix = glm::inverse(view_matrix_);
+    glm::vec3 camera_pos(inv_view_matrix[3][0], inv_view_matrix[3][1], inv_view_matrix[3][2]);
+    glm::vec3 camera_dir(inv_view_matrix[2][0], inv_view_matrix[2][1], inv_view_matrix[2][2]);
+    camera_dir = glm::normalize(camera_dir);
+    glm::vec3 camera_target = camera_pos - camera_distance_ * camera_dir;
+    float scroll_weight = (1.6 / (1 + std::exp(-camera_distance_ / 10)));
+    camera_distance_ += io.MouseWheel * scroll_weight;
+    std::cout << scroll_weight << std::endl;
+    camera_distance_ = std::max(camera_distance_, 3.0f);
+    camera_pos = camera_target + camera_distance_ * camera_dir;
+    view_matrix_ = glm::lookAt(camera_pos, camera_target, glm::vec3(0, 1, 0));
+  }
+
   ImGui::Separator();
   ImGui::Text("Animation");
-  ImGui::Combo("Animation: ", avatar_model_.GetAnimationIndexPtr(), avatar_model_.GetAnimationNames().c_str());
+  ImGui::Combo("Animation: ", avatar_model_.GetAnimationIndexPtr(),
+               avatar_model_.GetAnimationNames().c_str());
 
   RenderPlane(view_matrix_, proj_matrix_, model_matrix_);
   avatar_model_.Render(view_matrix_, proj_matrix_,
@@ -316,6 +319,7 @@ void App::RenderScene() {
 
   ImGui::Separator();
   ImGuizmo::SetID(0);
+
   EditTransform(&view_matrix_[0][0], &proj_matrix_[0][0],
                 &avatar_model_matrix_[0][0], true);
   ImGui::End();

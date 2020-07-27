@@ -70,6 +70,7 @@ private:
   bool show_video_ = true;
   float video_scale_ = 1.0;
   ImVec4 clear_color_ = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+  float camera_distance_ = 8.0;
 
   // Scene parameters.
   bool is_perspective_ = true;
@@ -78,7 +79,6 @@ private:
 
   // for camera
   CameraAngle camera_angle_;
-  float camera_distance_ = 8.f;
 
   glm::mat4 model_matrix_ = glm::mat4(1.f);
   glm::mat4 view_matrix_ = glm::mat4(1.f);
