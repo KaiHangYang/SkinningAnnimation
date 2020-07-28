@@ -223,7 +223,7 @@ private:
                            GLenum buffer_type);
   void ProcessBufferView(const tinygltf::Accessor& accessor);
   
-  void SetPrimitiveNormals(const tinygltf::Primitive& primitive, RenderParams& render_params);
+  //void SetPrimitiveNormals(const tinygltf::Primitive& primitive, RenderParams& render_params);
   tinygltf::Model model_;
 
   // About Animation.
